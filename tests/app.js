@@ -7,7 +7,7 @@ const ROOT = path.join(__dirname, "..");
 const BASE = "/kaylers-scanner/";
 const KEY = "cs.state.v1";
 const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".wasm": "application/wasm", ".json": "application/json",
-  ".webmanifest": "application/manifest+json", ".png": "image/png" };
+  ".webmanifest": "application/manifest+json", ".png": "image/png", ".gz": "application/gzip" };
 
 function startServer(BASE = module.exports.BASE){
   const server = http.createServer((req, res) => {
