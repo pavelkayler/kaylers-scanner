@@ -1,0 +1,12 @@
+{
+  "name": "kaylers-scanner-tests",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "test": "node --test --test-concurrency=1 fuzz-common.test.js fuzz-app.test.js invariant-app.test.js"
+  },
+  "devDependencies": {
+    "fast-check": "^3.23.2",
+    "playwright": "1.56.1"
+  }
+}

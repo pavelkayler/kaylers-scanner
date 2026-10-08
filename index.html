@@ -651,8 +651,12 @@ button.wide{width:100%;margin-top:10px}
       if(!rows.every(o => valid(kind, o)) || kind !== "batches" && new Set(rows.map(o => o.id)).size !== rows.length)
         throw new Error("В файле некорректные или повторяющиеся записи. Ничего не добавлено.");
     const live = rows => rows.filter(o => !o.deleted).map(clean);
+    // a rule with no pattern would name every code, one with no device names nothing: such rules are left out
+    const usable = r => { r.device = r.device.trim(); if(!r.pattern || !r.device) return false;
+      if(r.type === "regex") try{ new RegExp(r.pattern); }catch(_){ return false; }
+      return true; };
     return { createdAt: typeof copy.createdAt === "string" ? copy.createdAt : "",
-      batches: live(lists), items: live(copy.items), rules: live(copy.rules) };
+      batches: live(lists), items: live(copy.items), rules: live(copy.rules).filter(usable) };
   }
   // Adds only what the phone lacks: unknown codes (not already in the same list), their lists, and rules
   // for patterns the phone has no rule for. Existing records are never changed.

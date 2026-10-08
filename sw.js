@@ -10,7 +10,9 @@ self.addEventListener("activate", e => { e.waitUntil(caches.keys().then(ks => Pr
 self.addEventListener("fetch", e => {
   const url = new URL(e.request.url);
   if(e.request.method !== "GET" || url.origin !== location.origin) return;
-  if(e.request.mode === "navigate" && !["/", "/index.html"].includes(url.pathname)) return;
+  // the app's own folder: "/" when served by the PC, "/kaylers-scanner/" on GitHub Pages
+  const home = new URL(self.registration.scope).pathname;
+  if(e.request.mode === "navigate" && ![home, home + "index.html"].includes(url.pathname)) return;
   e.respondWith(caches.open(CACHE).then(async c => {
     const key = e.request.mode === "navigate" ? "index.html" : e.request;
     const hit = await c.match(key, { ignoreSearch: true });
