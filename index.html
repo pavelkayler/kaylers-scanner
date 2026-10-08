@@ -73,23 +73,14 @@ button:disabled{opacity:.45;cursor:default}
 .fx-tick svg{width:56px;height:56px}
 /* codes in the current list, read from the saved list; sits under the pill and turns green with a pop on each new code */
 .scan-count{position:absolute;left:50%;bottom:16px;z-index:3;transform:translateX(-50%);display:flex;align-items:baseline;gap:8px;padding:8px 18px;border-radius:999px;background:rgba(0,0,0,.65);color:#fff;font:600 1.6rem/1.1 var(--mono);text-align:center;font-variant-numeric:tabular-nums;white-space:nowrap;transition:background-color .35s ease-out}
-.scan-count small{font:500 .8rem/1 var(--body);opacity:.85}
 .scan-count.hit{background:#34C759;transition:none}
 /* pause after a scan: the aiming frame goes dim and dashed until the next code can be read */
 .frame.wait{border-style:dashed;border-color:rgba(255,255,255,.25)}
-/* text mode: a narrow band to put the printed number in */
-.frame.band{width:min(88vw,440px);height:68px;aspect-ratio:auto;border-radius:10px;border-color:#FFD60A}
-.ocr{position:absolute;left:12px;right:12px;bottom:64px;z-index:4;display:grid;gap:8px;padding:12px;border-radius:14px;background:rgba(0,0,0,.82);color:#fff}
-.ocr-status{font-size:.85rem;opacity:.9}
-.ocr input{font:600 1.15rem/1.2 var(--mono);background:#fff;color:#16212B;border:0;text-transform:uppercase}
-.ocr .pair button{padding:12px}
-.ocr button.primary{background:#34C759;border-color:#34C759;color:#fff}
 #reader{width:100%}
 #reader video{width:100%!important;display:block}
 .scanner-top{position:absolute;top:0;left:0;right:0;padding:calc(env(safe-area-inset-top,0px) + 14px) 16px 14px;color:#fff;text-align:center;font-weight:600;background:linear-gradient(rgba(0,0,0,.6),transparent);z-index:2}
 .scanner-bar{padding:14px 16px calc(env(safe-area-inset-bottom,0px) + 14px);display:flex;gap:10px;background:#000}
 .scanner-bar button{flex:1;background:#fff;color:#16212B;border:0;padding:14px;font-size:1rem}
-.scanner-bar button[aria-pressed="true"]{background:#FFD60A}
 .big{padding:18px;font-size:1.15rem;font-family:var(--display);letter-spacing:.02em}
 .manual{display:flex;gap:8px}
 .manual input{flex:1;min-width:0}
@@ -156,7 +147,7 @@ button.wide{width:100%;margin-top:10px}
 <header>
   <div>
     <div class="label" id="batchLabel">Список</div>
-    <h1>Kayler's Scanner <span class="ver">v20</span></h1>
+    <h1>Kayler's Scanner <span class="ver">v21</span></h1>
   </div>
   <div class="count" id="count" aria-live="polite">0<small>кодов</small></div>
 </header>
@@ -238,13 +229,8 @@ button.wide{width:100%;margin-top:10px}
     <pre id="infoText"></pre>
     <div>Сделайте скриншот и отправьте. Нажмите, чтобы закрыть.</div>
   </div>
-  <div class="scanner-view" id="scanView"><div id="reader"></div><div class="frame" aria-hidden="true"></div><div class="fx" id="fx"></div><div class="scan-count" id="scanCount" role="status" aria-label="Кодов в списке"><span id="scanNum">0</span><small>в списке</small></div><div class="focus-ring" id="focusRing" hidden></div>
-    <div class="ocr" id="ocrBox" hidden>
-      <div class="ocr-status" id="ocrStatus" role="status">Загружаю распознавание текста…</div>
-      <input id="ocrInput" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="Прочитанный номер" placeholder="Номер появится здесь">
-      <button type="button" class="primary" id="ocrAdd" disabled>Добавить</button>
-    </div></div>
-  <div class="scanner-bar"><button type="button" id="textBtn" aria-pressed="false">Читать текст</button><button type="button" id="scanClose">Закрыть</button></div>
+  <div class="scanner-view" id="scanView"><div id="reader"></div><div class="frame" aria-hidden="true"></div><div class="fx" id="fx"></div><div class="scan-count" id="scanCount" role="status" aria-label="Кодов в списке"><span id="scanNum">0</span></div><div class="focus-ring" id="focusRing" hidden></div></div>
+  <div class="scanner-bar"><button type="button" id="scanClose">Закрыть</button></div>
   <label id="hapticLabel" aria-hidden="true" style="position:absolute;width:1px;height:1px;overflow:hidden;opacity:0;pointer-events:none"><input type="checkbox" switch tabindex="-1"></label>
 </div>
 
@@ -809,16 +795,15 @@ button.wide{width:100%;margin-top:10px}
     }
     playFx(box, known ? "Уже в списке" : text, known).finally(pauseAfterScan);
   }
-  // One second from a scan to the next read (Pavel: «задержку в секунду, не больше»): the animation fits in it;
-  // if it ran short, the frame stays dashed for the rest of the second.
-  const PAUSE_MS = 1000;
+  // Two seconds from a scan to the next read: the animation plays, then the frame stays dashed for the rest of it.
+  const PAUSE_MS = 2000, HINT = $("scanHint").textContent;
   let pauseTimer = 0, scannedAt = 0;
   function pauseAfterScan(){
     clearTimeout(pauseTimer);
     const left = scannedAt + PAUSE_MS - Date.now();
     if(left <= 0 || !running){ done = false; return; }
     const fr = document.querySelector("#scanView .frame"); fr.classList.add("wait"); $("scanHint").textContent = "Пауза…";
-    pauseTimer = setTimeout(() => { fr.classList.remove("wait"); setHint(); done = false; }, left);
+    pauseTimer = setTimeout(() => { fr.classList.remove("wait"); $("scanHint").textContent = HINT; done = false; }, left);
   }
   function endPause(){ clearTimeout(pauseTimer); document.querySelector("#scanView .frame").classList.remove("wait"); }
   // Android: vibrate. iPhone Safari has no vibrate; on iOS 18+ toggling a switch checkbox gives a tick, may be ignored elsewhere
@@ -885,13 +870,15 @@ button.wide{width:100%;margin-top:10px}
     formats:["DataMatrix", "Aztec", "QRCode", "MicroQRCode", "PDF417", "AllLinear"] };
   let wasmReady = null, wasmBusy = false, lastWasm = 0, wasmCanvas = null, wasmPass = 0;
   // One pass per free frame, in turn. The centre of the frame at full camera resolution reads small and dirty codes
-  // that the 960px copy of the whole frame loses; denoise and the global binarizer read smudged and scratched ones.
-  // Measured on 560 synthetic dirty/blurred/low-contrast labels: 335 read before, 389 with these passes, no wrong reads.
+  // that the 960px copy of the whole frame loses; denoise and the other binarizers read smudged, scratched and pale ones.
+  // Measured on 560 synthetic dirty/blurred/low-contrast labels: 335 read with the whole frame only, 406 with these passes,
+  // no wrong reads. The fixed-threshold pass alone added 12 (v21).
   const WASM_PASSES = [
     { crop:true, opts:WASM_OPTS },
     { crop:false, opts:WASM_OPTS },
     { crop:true, opts:Object.assign({}, WASM_OPTS, { tryDenoise:true }) },
     { crop:true, opts:Object.assign({}, WASM_OPTS, { binarizer:"GlobalHistogram" }) },
+    { crop:true, opts:Object.assign({}, WASM_OPTS, { binarizer:"FixedThreshold" }) },
   ];
   function prepareWasm(){
     if(wasmReady || typeof ZXingWASM === "undefined") return;
@@ -947,113 +934,6 @@ button.wide{width:100%;margin-top:10px}
       cam.qrcode.decodeAsync(c).then(r => { if(running && r && r.text) onCode(r.text, { result:r }); }, () => {});
     }catch(e){}
   }
-
-  // ---------- text mode: read the number printed under a barcode that will not scan ----------
-  // Tesseract.js (vendor/tesseract, runs on the phone in a Web Worker, nothing is sent anywhere) reads the yellow band
-  // a few times a second; the most frequent result goes into the field, the person checks it and taps «Добавить».
-  // EAN/UPC numbers carry a check digit, so a passing one is marked as checked. Letters can be misread (O/0, 6/G): check them.
-  const OCR_DIR = "vendor/tesseract/";
-  let ocrOn = false, ocrWorker = null, ocrBusy = false, ocrReads = [], ocrCanvas = null, ocrTimer = 0, ocrEdited = false;
-  function setHint(){ $("scanHint").textContent = ocrOn ? "Наведите строку с номером в жёлтую рамку" : "Наведите на QR-код или штрихкод"; }
-  const loadScript = src => new Promise((ok, fail) => { const t = document.createElement("script"); t.src = src; t.onload = ok; t.onerror = fail; document.head.appendChild(t); });
-  function ocrWorkerGet(){
-    if(!ocrWorker) ocrWorker = (async () => {
-      if(typeof Tesseract === "undefined") await loadScript(OCR_DIR + "tesseract.min.js");
-      const base = new URL(OCR_DIR, location.href).href;
-      const w = await Tesseract.createWorker("eng", 1, { workerPath: base + "worker.min.js", corePath: base, langPath: base.replace(/\/$/, ""), gzip: true, workerBlobURL: false });
-      await w.setParameters({ tessedit_pageseg_mode: "7", user_defined_dpi: "300", tessedit_char_whitelist: "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-/: " });
-      return w;
-    })().catch(e => { ocrWorker = null; throw e; });
-    return ocrWorker;
-  }
-  // the band in video pixels → grey → Otsu threshold; dark blobs touching the band edge (barcode bars, label edges) are
-  // erased, the rest keeps its grey levels. Measured on 180 synthetic labels: 120 read exactly (EAN-13 89%, serials 44%)
-  function ocrFrame(v){
-    const band = document.querySelector("#scanView .frame").getBoundingClientRect(), vr = v.getBoundingClientRect();
-    const s = v.videoWidth / vr.width;
-    const sx = Math.max(0, (band.left - vr.left) * s), sy = Math.max(0, (band.top - vr.top) * s);
-    const sw = Math.min(v.videoWidth - sx, band.width * s), sh = Math.min(v.videoHeight - sy, band.height * s);
-    if(sw < 20 || sh < 10) return null;
-    const k = Math.min(1, 1000 / sw), w = Math.round(sw * k), h = Math.round(sh * k), pad = 20;
-    const c = ocrCanvas = ocrCanvas || document.createElement("canvas");
-    c.width = w + pad * 2; c.height = h + pad * 2;
-    const g = c.getContext("2d", { willReadFrequently:true });
-    g.fillStyle = "#fff"; g.fillRect(0, 0, c.width, c.height);
-    g.drawImage(v, sx, sy, sw, sh, pad, pad, w, h);
-    const img = g.getImageData(pad, pad, w, h), d = img.data, n = w * h, grey = new Uint8Array(n), hist = new Uint32Array(256);
-    for(let i = 0; i < n; i++){ const y = (d[i*4] * 77 + d[i*4+1] * 150 + d[i*4+2] * 29) >> 8; grey[i] = y; hist[y]++; }
-    let sum = 0; for(let i = 0; i < 256; i++) sum += i * hist[i];
-    let wB = 0, sB = 0, best = -1, th = 128;
-    for(let t = 0; t < 256; t++){ wB += hist[t]; if(!wB) continue; const wF = n - wB; if(!wF) break; sB += t * hist[t];
-      const v2 = wB * wF * (sB / wB - (sum - sB) / wF) ** 2; if(v2 > best){ best = v2; th = t; } }
-    const gone = new Uint8Array(n), stack = [];
-    for(let x = 0; x < w; x++) stack.push(x, (h - 1) * w + x);
-    for(let y = 0; y < h; y++) stack.push(y * w, y * w + w - 1);
-    while(stack.length){
-      const i = stack.pop(); if(gone[i] || grey[i] > th) continue; gone[i] = 1;
-      const x = i % w, y = (i - x) / w;
-      for(let dy = -1; dy <= 1; dy++) for(let dx = -1; dx <= 1; dx++){ const xx = x + dx, yy = y + dy; if(xx >= 0 && yy >= 0 && xx < w && yy < h) stack.push(yy * w + xx); }
-    }
-    for(let i = 0; i < n; i++){ const o = gone[i] || grey[i] > th ? 255 : grey[i]; d[i*4] = d[i*4+1] = d[i*4+2] = o; }
-    g.putImageData(img, pad, pad);
-    return c;
-  }
-  const checkOk = s => { if(!/^(\d{8}|\d{12,14})$/.test(s)) return false; const a = [...s].map(Number), c = a.pop();
-    return (10 - a.reverse().reduce((t, x, i) => t + x * (i % 2 ? 1 : 3), 0) % 10) % 10 === c; };
-  CS.ocrCandidates = text => {
-    const out = [];
-    for(let line of String(text).toUpperCase().split("\n")){
-      line = line.replace(/\b(S\/?N|SN|SIN|SERIAL( NO)?)\s*[:.]?\s*/g, " ").trim();
-      if(!line) continue;
-      const digits = line.replace(/\s+/g, "");
-      if(/^\d{8,14}$/.test(digits)) out.push({ text: digits, ok: checkOk(digits) });
-      for(const tok of line.split(/\s+/)){
-        const t = tok.replace(/^[^A-Z0-9]+|[^A-Z0-9]+$/g, "");
-        if(t.length >= 5 && /\d/.test(t) && !out.some(o => o.text === t)) out.push({ text: t, ok: checkOk(t) });
-      }
-    }
-    return out.sort((a, b) => (b.ok - a.ok) || (b.text.length - a.text.length));
-  };
-  async function ocrTick(){
-    ocrTimer = 0;
-    if(!ocrOn || !running) return;
-    const v = document.querySelector("#reader video");
-    if(!ocrBusy && !done && v && v.videoWidth){
-      ocrBusy = true;
-      try{
-        const w = await ocrWorkerGet();
-        if(ocrOn && $("ocrStatus").dataset.ready !== "1"){ $("ocrStatus").dataset.ready = "1"; $("ocrStatus").textContent = "Читаю…"; }
-        const c = ocrFrame(v);
-        const top = c && ocrOn ? CS.ocrCandidates((await w.recognize(c)).data.text)[0] : null;
-        if(top && ocrOn){
-          ocrReads.push(top); if(ocrReads.length > 6) ocrReads.shift();
-          const score = {}; for(const r of ocrReads) score[r.text] = (score[r.text] || 0) + (r.ok ? 3 : 1);
-          const best = Object.entries(score).sort((a, b) => b[1] - a[1])[0][0];
-          if(!ocrEdited){ $("ocrInput").value = best; $("ocrAdd").disabled = false; }
-          $("ocrStatus").textContent = checkOk(best) ? "Номер прочитан, контрольная цифра сходится" : "Проверьте номер: буквы и цифры могут спутаться (O и 0, 6 и G)";
-        }
-      }catch(e){ $("ocrStatus").textContent = "Распознавание текста не загрузилось. Нужна связь с интернетом при первом запуске."; }
-      finally{ ocrBusy = false; }
-    }
-    if(ocrOn && running) ocrTimer = setTimeout(ocrTick, 200);
-  }
-  function setOcr(on){
-    ocrOn = on; clearTimeout(ocrTimer); ocrTimer = 0;
-    ocrReads = []; ocrEdited = false; $("ocrInput").value = ""; $("ocrAdd").disabled = true;
-    $("textBtn").setAttribute("aria-pressed", on); $("textBtn").textContent = on ? "Штрихкод" : "Читать текст";
-    $("ocrBox").hidden = !on;
-    document.querySelector("#scanView .frame").classList.toggle("band", on);
-    if(on){ if($("ocrStatus").dataset.ready !== "1") $("ocrStatus").textContent = "Загружаю распознавание текста…"; ocrTick(); }
-    setHint();
-  }
-  $("textBtn").onclick = () => setOcr(!ocrOn);
-  $("ocrInput").oninput = () => { ocrEdited = true; $("ocrAdd").disabled = !$("ocrInput").value.trim(); };
-  $("ocrAdd").onclick = () => {
-    const text = $("ocrInput").value.trim().toUpperCase();
-    if(!text || busy) return;
-    endPause(); done = false; lastCode = null; ocrReads = []; $("ocrStatus").textContent = "Читаю…"; ocrEdited = false; $("ocrInput").value = ""; $("ocrAdd").disabled = true; $("ocrInput").blur();
-    onCode(text, { result:{ format:{ formatName: "Текст" } } });
-  };
 
   async function openStream(id){
     const vc = { width:{ ideal:1920 }, height:{ ideal:1080 }, advanced:[{ focusMode:"continuous" }] };
@@ -1111,7 +991,7 @@ button.wide{width:100%;margin-top:10px}
     ring.hidden = false; ring.classList.remove("go"); void ring.offsetWidth; ring.classList.add("go");
   }
   $("scanView").addEventListener("click", e => {
-    if(!running || e.target.closest("#scanCount, #ocrBox")) return;
+    if(!running || e.target.closest("#scanCount")) return;
     const view = $("scanView").getBoundingClientRect();
     showRing(e.clientX - view.left, e.clientY - view.top);
     let v = document.querySelector("#reader video").getBoundingClientRect();
@@ -1149,7 +1029,7 @@ button.wide{width:100%;margin-top:10px}
 
   async function startCam(){
     if(typeof Html5Qrcode === "undefined"){ say("Модуль распознавания не загрузился. Обновите страницу.", "warn"); return; }
-    $("scanner").hidden = false; done = false; busy = true; lastCode = null; endPause(); setOcr(false);
+    $("scanner").hidden = false; done = false; busy = true; lastCode = null; endPause();
     prepareWasm();
     $("torchBtn").hidden = true; $("infoPanel").hidden = true;
     setTorchUi(false);
@@ -1175,7 +1055,7 @@ button.wide{width:100%;margin-top:10px}
     }finally{ busy = false; }
   }
   async function stopCam(){
-    clearTimeout(focusTimer); endPause(); if(ocrOn) setOcr(false);
+    clearTimeout(focusTimer); endPause();
     if(torchOn){ const t = camTrack(); if(t) await tryConstraints(t, { torch:false }); setTorchUi(false); }
     await closeStream();
     $("scanner").hidden = true; $("focusRing").hidden = true; $("infoPanel").hidden = true; $("fx").textContent = "";
@@ -1231,6 +1111,8 @@ button.wide{width:100%;margin-top:10px}
   };
 
   if("serviceWorker" in navigator && window.isSecureContext) navigator.serviceWorker.register("sw.js").catch(() => {});
+  // v20 text recognition kept its language data (~3 MB) here; the app no longer reads text, so free the space
+  try{ indexedDB.deleteDatabase("keyval-store"); }catch(e){}
 
   onLockLost = () => { blockInstance("Право записи этого окна потеряно."); return true; };
   window.addEventListener("pageshow", e => { if(e.persisted) blockInstance("Окно восстановлено из истории браузера. Нужно заново проверить право записи."); });
