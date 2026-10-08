@@ -19,7 +19,7 @@
 
   // Exact code wins, then the longest matching prefix, then "contains" and regex rules.
   CS.matchRule = (rules, code) => {
-    const live = rules.filter(r => !r.deleted), C = String(code).toUpperCase();
+    const live = rules.filter(r => !r.deleted && r.pattern), C = String(code).toUpperCase(); // an empty pattern would match every code
     const exact = live.find(r => r.type === "exact" && r.pattern.toUpperCase() === C);
     if(exact) return exact;
     const pre = live.filter(r => r.type === "prefix" && C.startsWith(r.pattern.toUpperCase()))
@@ -60,23 +60,31 @@
   };
   CS.workbookBlob = sheets => {
     const wb = XLSX.utils.book_new();
-    const used = new Set();
+    // Excel's sheet name rules: no []:*?/\, no apostrophe at either end, "History" is reserved, unique ignoring case
+    const used = new Set(["history"]);
     for(const [name, ws] of sheets){
-      let n = String(name).replace(/[\\\/\?\*\[\]:]/g, " ").slice(0, 28) || "Лист", k = n, i = 2;
-      while(used.has(k)) k = n.slice(0, 25) + " " + i++;
-      used.add(k); XLSX.utils.book_append_sheet(wb, ws, k);
+      let n = String(name).replace(/[\\\/\?\*\[\]:]/g, " ").slice(0, 28).replace(/^[\s']+|[\s']+$/g, "") || "Лист", k = n, i = 2;
+      while(used.has(k.toLowerCase())) k = n.slice(0, 25) + " " + i++;
+      used.add(k.toLowerCase()); XLSX.utils.book_append_sheet(wb, ws, k);
     }
     return new Blob([XLSX.write(wb, { bookType:"xlsx", type:"array" })],
       { type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
   };
-  // Device base file: column A code or pattern (as CS.showPattern writes it), column B device name.
+  // Device base file: column A code or pattern (as CS.showPattern writes it), column B device name,
+  // column C the rule type, so a code that itself ends in "*" or looks like "/…/" comes back as the same rule.
+  const TYPE_NAMES = { exact:"код целиком", prefix:"начало кода", contains:"содержит", regex:"регулярное выражение" };
+  const TYPES = Object.fromEntries(Object.entries(TYPE_NAMES).map(([k, v]) => [v, k]));
+  // column A with its type known: drop only the marks CS.showPattern added
+  const unwrap = (type, a) => type === "prefix" ? a.replace(/\*$/, "") : type === "contains" ? a.replace(/^\*|\*$/g, "")
+    : type === "regex" ? a.replace(/^\/|\/$/g, "") : a;
   CS.rulesBlob = rules => {
-    const rows = rules.slice().sort((a, b) => a.device.localeCompare(b.device, "ru")).map(r => [CS.showPattern(r), r.device]);
-    const ws = XLSX.utils.aoa_to_sheet([["Код или шаблон", "Устройство"], ...rows]);
-    ws["!cols"] = [{ wch:32 }, { wch:32 }];
+    const rows = rules.slice().sort((a, b) => a.device.localeCompare(b.device, "ru")).map(r => [CS.showPattern(r), r.device, TYPE_NAMES[r.type] || ""]);
+    const ws = XLSX.utils.aoa_to_sheet([["Код или шаблон", "Устройство", "Тип правила"], ...rows]);
+    ws["!cols"] = [{ wch:32 }, { wch:32 }, { wch:20 }];
     return CS.workbookBlob([["Справочник", ws]]);
   };
   // Reads the first sheet of an .xlsx/.xls/.csv; an optional header row is skipped, bad rows are counted.
+  // Without column C (older or hand-made files) the type comes from the marks in column A, as CS.parsePattern reads them.
   CS.readRules = buf => {
     const wb = XLSX.read(buf, { type:"array" });
     const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header:1, raw:false, defval:"" });
@@ -84,8 +92,10 @@
     rows.forEach((row, i) => {
       const a = String(row[0] || "").trim(), b = String(row[1] || "").trim();
       if(!a && !b) return;
-      if(i === 0 && /код|шаблон|code|pattern/i.test(a)) return;
-      const r = CS.parsePattern(a);
+      // a header row, not a code that merely contains the word "code"
+      if(i === 0 && (/^(код( или шаблон)?|шаблон|code|pattern)$/i.test(a) || /^(устройство|название|device|name)$/i.test(b))) return;
+      const type = TYPES[String(row[2] || "").trim().toLowerCase()];
+      const r = type ? { type, pattern: unwrap(type, a) } : CS.parsePattern(a);
       if(!r.pattern || !b){ skipped++; return; }
       if(r.type === "regex"){ try{ new RegExp(r.pattern); }catch(_){ skipped++; return; } }
       r.device = b; rules.push(r);
