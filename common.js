@@ -111,11 +111,12 @@
   };
 
   // Phone: share sheet ("Save to Files") when available, otherwise a normal download.
+  // Only the file is shared: a title or text makes messengers (Max, Telegram) send the file name as a separate message.
   CS.saveBlob = async (name, blob) => {
     try{
       const file = new File([blob], name, { type: blob.type });
       if(navigator.canShare && navigator.canShare({ files:[file] }) && /iPhone|iPad|Android/i.test(navigator.userAgent)){
-        await navigator.share({ files:[file], title:name });
+        await navigator.share({ files:[file] });
         return "saved";
       }
     }catch(e){ if(e && e.name === "AbortError") return "declined"; }
