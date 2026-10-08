@@ -1,0 +1,1084 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Kayler's Scanner">
+<meta name="theme-color" content="#16212B">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<title>Kayler's Scanner</title>
+<style>
+/* Layout: one-column phone tool. Header, scan zone, the open list as an inventory slip, then the menus. */
+:root{
+  --bg:#F3F5F4; --surface:#FFFFFF; --ink:#16212B; --muted:#5E6B74; --line:#D9DFDD;
+  --accent:#E2570F; --accent-ink:#FFFFFF; --ok:#1F7A4D; --warn:#A15C00; --bad:#B42318; --chip:#EAEFEE;
+  --display:"Archivo","Helvetica Neue",Arial,sans-serif;
+  --body:-apple-system,"Segoe UI",Roboto,sans-serif;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root{
+  --bg:#0F161C; --surface:#18222B; --ink:#E8EEF0; --muted:#95A3AC; --line:#2A3742;
+  --accent:#FF7A33; --accent-ink:#1A0D05; --ok:#4FC28A; --warn:#E3A44A; --bad:#F97066; --chip:#22303B; color-scheme:dark}}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);background:var(--bg)}
+body{background:var(--bg);color:var(--ink);font:15px/1.45 var(--body);padding-inline:16px;padding-block:12px 40px;max-width:640px;margin:0 auto}
+h1,h2{font-family:var(--display);text-wrap:balance;margin:0}
+h1{font-size:1.35rem;font-weight:800;letter-spacing:-.01em}
+h2{font-size:1rem;font-weight:700}
+/* app version: bump together with CACHE in sw.js on every update */
+.ver{font-family:var(--mono);font-size:.75rem;font-weight:600;color:var(--muted);background:var(--chip);border-radius:999px;padding:2px 8px;vertical-align:middle}
+.label{font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600}
+header{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding-block:8px 10px}
+.count{font-family:var(--mono);font-size:1.6rem;font-weight:600;font-variant-numeric:tabular-nums;line-height:1;text-align:right}
+.count small{font-size:.75rem;color:var(--muted);font-family:var(--body);font-weight:500;margin-left:4px}
+/* storage problems and blocked startup; hidden in normal work */
+.notice{display:grid;gap:10px;font-size:.88rem;color:var(--bad);background:var(--surface);border:1px solid var(--bad);border-radius:12px;padding:12px;margin-bottom:12px}
+button{font:inherit;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:12px 14px;font-weight:600;cursor:pointer}
+button:focus-visible,input:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+button.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+button.ghost{background:transparent}
+button:disabled{opacity:.45;cursor:default}
+.scan{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px;display:grid;gap:10px}
+.scanner{position:fixed;inset:0;z-index:50;background:#000;display:flex;flex-direction:column}
+.scanner-view{flex:1;min-height:0;display:flex;align-items:center;overflow:hidden;position:relative;touch-action:manipulation}
+.torch{position:absolute;top:calc(env(safe-area-inset-top,0px) + 56px);right:16px;z-index:3;width:52px;height:52px;border-radius:50%;padding:0;border:0;background:rgba(40,40,40,.75);color:#fff;display:grid;place-items:center}
+.torch[aria-pressed="true"]{background:#fff;color:#16212B}
+.info{position:absolute;top:calc(env(safe-area-inset-top,0px) + 62px);left:16px;z-index:3;width:40px;height:40px;border-radius:50%;padding:0;border:0;background:rgba(40,40,40,.75);color:#fff;font:600 1.1rem/1 Georgia,serif}
+.info-panel{position:absolute;inset:calc(env(safe-area-inset-top,0px) + 110px) 16px auto 16px;max-height:60vh;overflow:auto;z-index:4;background:rgba(0,0,0,.85);color:#fff;border-radius:12px;padding:12px;font-size:.8rem}
+.info-panel pre{white-space:pre-wrap;word-break:break-all;font:.72rem/1.35 var(--mono);margin:8px 0}
+.focus-ring{position:absolute;width:76px;height:76px;margin:-38px 0 0 -38px;border:2px solid #FFD60A;border-radius:4px;pointer-events:none;z-index:2;opacity:0}
+.focus-ring.go{animation:focus 1.2s ease-out}
+@keyframes focus{0%{opacity:1;transform:scale(1.35)}20%{opacity:1;transform:scale(1)}75%{opacity:1}100%{opacity:0}}
+/* the whole frame is scanned; this square is only a hint where to aim */
+.frame{position:absolute;left:50%;top:50%;width:min(72vw,320px);aspect-ratio:1;transform:translate(-50%,-50%);border:2px solid rgba(255,255,255,.5);border-radius:18px;pointer-events:none;z-index:1}
+/* found: yellow corner brackets fly onto the code and a pill shows its text, like the iPhone Code Scanner; only transform/opacity animate */
+.fx{position:absolute;inset:0;pointer-events:none;z-index:2;overflow:hidden}
+.fx>*{position:absolute;will-change:transform,opacity}
+.fx-corner{left:0;top:0;width:30px;height:30px;border:0 solid #FFD60A}
+.fx-corner.tl{border-top-width:4px;border-left-width:4px;border-top-left-radius:10px}
+.fx-corner.tr{border-top-width:4px;border-right-width:4px;border-top-right-radius:10px}
+.fx-corner.bl{border-bottom-width:4px;border-left-width:4px;border-bottom-left-radius:10px}
+.fx-corner.br{border-bottom-width:4px;border-right-width:4px;border-bottom-right-radius:10px}
+.fx-pill{left:50%;bottom:72px;max-width:85%;padding:8px 14px;border-radius:999px;background:#FFD60A;color:#16212B;font:600 .95rem/1.2 var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transform:translateX(-50%);opacity:0}
+.fx-pill.grey{background:#8E8E93;color:#fff;font-family:var(--body)}
+/* codes in the current list, read from the saved list; sits under the pill */
+.scan-count{position:absolute;left:50%;bottom:16px;z-index:3;transform:translateX(-50%);min-width:44px;padding:6px 14px;border-radius:999px;background:rgba(0,0,0,.6);color:#fff;font:600 1.1rem/1.2 var(--mono);text-align:center;font-variant-numeric:tabular-nums}
+#reader{width:100%}
+#reader video{width:100%!important;display:block}
+.scanner-top{position:absolute;top:0;left:0;right:0;padding:calc(env(safe-area-inset-top,0px) + 14px) 16px 14px;color:#fff;text-align:center;font-weight:600;background:linear-gradient(rgba(0,0,0,.6),transparent);z-index:2}
+.scanner-bar{padding:14px 16px calc(env(safe-area-inset-bottom,0px) + 14px);display:flex;gap:10px;background:#000}
+.scanner-bar button{flex:1;background:#fff;color:#16212B;border:0;padding:14px;font-size:1rem}
+.big{padding:18px;font-size:1.15rem;font-family:var(--display);letter-spacing:.02em}
+.manual{display:flex;gap:8px}
+.manual input{flex:1;min-width:0}
+input{font:inherit;font-family:var(--mono);padding:11px 12px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--ink)}
+.msg{font-size:.85rem;color:var(--muted);min-height:1.2em}
+.msg.ok{color:var(--ok)} .msg.warn{color:var(--warn)}
+.list-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-top:22px;margin-bottom:8px}
+.list-head h2{min-width:0}
+.bname{border:0;background:none;padding:0;font:inherit;color:inherit;text-align:left;border-radius:4px;word-break:break-word}
+.bname .pen{color:var(--accent);font-weight:600;margin-left:4px}
+#batchForm{margin:0 0 10px}
+ol.slip{list-style:none;margin:0;padding:0;background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.slip li{display:grid;grid-template-columns:2.2rem 1fr auto;gap:10px;align-items:center;padding:10px 12px;border-top:1px dashed var(--line)}
+.slip li:first-child{border-top:0}
+.slip .n{font-family:var(--mono);color:var(--muted);font-variant-numeric:tabular-nums;font-size:.85rem}
+.slip .code{font-family:var(--mono);font-weight:600;word-break:break-all;min-width:0}
+.pfx{color:var(--accent)}
+.slip .meta{display:flex;gap:6px;flex-wrap:wrap;margin-top:3px;align-items:center}
+.chip{font-size:.7rem;background:var(--chip);color:var(--muted);border-radius:999px;padding:2px 8px;letter-spacing:.02em}
+button.chip{border:0;font-family:var(--body);cursor:pointer;padding:4px 10px}
+.chip.dev{background:var(--accent);color:var(--accent-ink);font-weight:600}
+.chip.add{background:transparent;border:1px dashed var(--muted);color:var(--ink);font-weight:600}
+.del{border:0;background:transparent;color:var(--muted);padding:8px;font-size:1.1rem;line-height:1}
+.empty{padding:22px 14px;text-align:center;color:var(--muted);font-size:.9rem;display:block!important}
+.namer{display:grid;gap:8px;margin-top:10px;padding:10px;border-radius:10px;background:var(--bg);border:1px solid var(--line)}
+.namer input{min-width:0;font-family:var(--body);padding:9px 10px;background:var(--surface)}
+.namer button{padding:9px 12px}
+.scope{display:flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.scope .seg{flex:1;border:0;border-radius:0;background:transparent;font-size:.85rem;padding:8px}
+.scope .seg.on{background:var(--ink);color:var(--bg)}
+.tune{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.tune>button{width:40px;padding:6px 0;font-size:1.1rem;line-height:1}
+.tune .hint{flex:1 1 180px;min-width:0}
+.tune code{font-family:var(--mono);color:var(--accent);font-weight:600;word-break:break-all}
+.pair{display:flex;gap:8px}
+.pair button{flex:1}
+.end{position:sticky;bottom:calc(env(safe-area-inset-bottom,0px) + 10px);margin-top:16px;display:grid;gap:8px}
+.end>button{padding:16px;font-size:1.05rem;font-family:var(--display);letter-spacing:.02em}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px;display:grid;gap:10px}
+.newbatch{margin-top:12px}
+details{margin-top:26px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px}
+summary{cursor:pointer;font-family:var(--display);font-weight:700}
+.rules{display:grid;gap:8px;margin-top:10px}
+.rule{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;font-size:.85rem;border-top:1px dashed var(--line);padding-top:8px}
+.rule code{font-family:var(--mono);word-break:break-all}
+.ruleform{display:grid;gap:8px;grid-template-columns:1fr 1fr;margin-top:10px}
+.ruleform>*{min-width:0}
+.ruleform .wide{grid-column:1/-1}
+.hint{font-size:.8rem;color:var(--muted)}
+button.danger{color:var(--bad)}
+button.wide{width:100%;margin-top:10px}
+.sub{margin:20px 0 0}
+.lists{display:grid;gap:8px;margin-top:10px}
+.listrow{display:grid;gap:6px;border-top:1px dashed var(--line);padding-top:10px}
+.listrow.on .lname{color:var(--accent)}
+.lname{font-weight:700;word-break:break-word}
+.listrow .pair button{padding:8px 10px}
+@media (prefers-reduced-motion:no-preference){.slip li.fresh{animation:flash 1.2s ease-out}}
+@keyframes flash{from{background:var(--chip)}to{background:transparent}}
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="label" id="batchLabel">Список</div>
+    <h1>Kayler's Scanner <span class="ver">v19</span></h1>
+  </div>
+  <div class="count" id="count" aria-live="polite">0<small>кодов</small></div>
+</header>
+<div class="notice" id="notice" role="alert" hidden><span id="noticeText"></span><button id="noticeBtn" type="button" hidden></button></div>
+
+<section class="scan" aria-label="Сканирование">
+  <button class="primary big" id="camBtn" type="button">Сканировать</button>
+  <form class="manual" id="manualForm">
+    <input id="manualInput" placeholder="Ввести код вручную" autocomplete="off" aria-label="Код вручную">
+    <button type="submit">Добавить</button>
+  </form>
+  <div class="msg" id="msg">QR-коды и штрихкоды (EAN, Code 128, Code 39, DataMatrix и др.)</div>
+</section>
+
+<div class="list-head">
+  <h2 id="batchName"><button type="button" class="bname" id="nameBtn" aria-label="Изменить название списка"><span id="batchTitle"></span><span class="pen" aria-hidden="true">✎</span></button></h2>
+  <span class="label" id="sessionStart"></span>
+</div>
+<form class="namer" id="batchForm" hidden>
+  <input id="batchInput" maxlength="80" autocomplete="off" placeholder="Например: Поставка от первого поставщика" aria-label="Название списка">
+  <div class="pair"><button type="submit" class="primary">Сохранить</button><button type="button" class="ghost" id="batchCancel">Отмена</button></div>
+</form>
+<ol class="slip" id="list"></ol>
+
+<div class="end">
+  <div class="panel" id="afterExport" hidden>
+    <div id="afterText">Файл готов.</div>
+    <div class="pair">
+      <button class="primary" id="afterNew" type="button">Новый список</button>
+      <button class="ghost" id="afterKeep" type="button">Продолжить этот</button>
+    </div>
+    <button id="afterBackup" type="button" hidden>Скачать резервную копию</button>
+  </div>
+  <button class="primary" id="endBtn" type="button" disabled>End scanning · скачать Excel</button>
+</div>
+<button class="newbatch ghost" id="newBtn" type="button" style="width:100%">Новый список</button>
+
+<details id="listsMenu">
+  <summary>Мои списки</summary>
+  <p class="hint" id="storageText">Списки хранятся только на этом телефоне.</p>
+  <div class="lists" id="lists"></div>
+  <button id="allExcelBtn" type="button" class="wide">Excel: все списки</button>
+  <h3 class="label sub">Резервная копия</h3>
+  <p class="hint">Один файл со всеми списками и справочником. Сохраните его в «Файлы», чтобы не потерять данные или перенести их на другой телефон.</p>
+  <button id="backupBtn" type="button" class="wide">Скачать резервную копию</button>
+  <p class="hint">Восстановить из копии: сначала появится просмотр, после подтверждения добавятся только те списки и коды, которых нет на телефоне. Текущие данные не меняются.</p>
+  <input id="backupFile" type="file" accept=".json,application/json" aria-label="Файл резервной копии" style="width:100%">
+  <p id="backupStatus" class="hint" role="status"></p>
+  <div id="backupPreview" hidden>
+    <pre id="backupPreviewText" style="white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;font-size:.85rem"></pre>
+    <div class="pair"><button id="backupConfirm" class="primary" type="button">Добавить на телефон</button><button id="backupCancel" class="ghost" type="button">Отмена</button></div>
+  </div>
+</details>
+
+<details id="devices">
+  <summary>Справочник устройств</summary>
+  <p class="hint">Справочник подписывает коды названием устройства. Шаблон <code>INV-LT*</code> значит «начинается с INV-LT», <code>*LT*</code> значит «содержит LT», код без звёздочки должен совпасть целиком. Справочник сохраняется в Excel-файл, который можно загрузить на другом телефоне или собрать самому: столбец A код или шаблон, столбец B название.</p>
+  <div class="pair">
+    <button id="rulesExportBtn" type="button">Скачать справочник</button>
+    <button id="rulesImportBtn" type="button">Загрузить из файла</button>
+  </div>
+  <input id="rulesFile" type="file" accept=".xlsx,.xls,.csv" hidden>
+  <form class="ruleform" id="ruleForm">
+    <input id="rulePattern" placeholder="INV-LT*" required aria-label="Код или шаблон">
+    <input id="ruleDevice" placeholder="Ноутбук Lenovo T14" required aria-label="Устройство" style="font-family:var(--body)">
+    <button class="wide" type="submit">Добавить правило</button>
+  </form>
+  <div class="rules" id="rules"></div>
+</details>
+
+<div class="scanner" id="scanner" hidden>
+  <div class="scanner-top" id="scanHint">Наведите на QR-код или штрихкод</div>
+  <button type="button" class="torch" id="torchBtn" aria-label="Фонарик" aria-pressed="false" hidden>
+    <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path d="M7 2h10v4l-3 4v12h-4V10L7 6z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M7 6h10" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="14" r="1.2" fill="currentColor"/></svg>
+  </button>
+  <button type="button" class="info" id="infoBtn" aria-label="Возможности камеры">i</button>
+  <div class="info-panel" id="infoPanel" hidden>
+    <div><b>Возможности камеры</b> <span id="infoCopied" hidden>· скопировано</span></div>
+    <pre id="infoText"></pre>
+    <div>Сделайте скриншот и отправьте. Нажмите, чтобы закрыть.</div>
+  </div>
+  <div class="scanner-view" id="scanView"><div id="reader"></div><div class="frame" aria-hidden="true"></div><div class="fx" id="fx"></div><div class="scan-count" id="scanCount" role="status" aria-label="Кодов в списке">0</div><div class="focus-ring" id="focusRing" hidden></div></div>
+  <div class="scanner-bar"><button type="button" id="scanClose">Закрыть</button></div>
+  <label id="hapticLabel" aria-hidden="true" style="position:absolute;width:1px;height:1px;overflow:hidden;opacity:0;pointer-events:none"><input type="checkbox" switch tabindex="-1"></label>
+</div>
+
+<script src="vendor/html5-qrcode.min.js"></script>
+<script src="vendor/zxing-reader.js"></script>
+<script src="vendor/xlsx.full.min.js"></script>
+<script src="common.js"></script>
+<script>
+(function(){
+  "use strict";
+  const $ = id => document.getElementById(id);
+  const KEY = "cs.state.v1";
+  const LEGACY_RECOVERY = "cs.recovery.v1"; // written by v13–v16 for unsent scans; read once, never changed
+  const KINDS = ["batches", "items", "rules"];
+  let ownsStorage = false, instanceBlocked = "", onLockLost = () => {};
+  const controls = ["camBtn", "newBtn", "nameBtn", "endBtn", "manualInput", "rulePattern", "ruleDevice", "rulesImportBtn", "backupFile", "backupConfirm"]
+    .map(id => [$(id), $(id).disabled]);
+  for(const [el] of controls) el.disabled = true;
+  $("manualForm").onsubmit = $("ruleForm").onsubmit = e => e.preventDefault();
+  function notice(text, button, onclick){
+    $("notice").hidden = !text; $("noticeText").textContent = text || "";
+    $("noticeBtn").hidden = !button; $("noticeBtn").textContent = button || ""; $("noticeBtn").onclick = onclick || null;
+  }
+  function blockedStartup(text){
+    for(const [el] of controls) el.disabled = true;
+    notice(text, "Повторить", () => location.reload());
+  }
+  // Only one live page may read-modify-write this origin's state.
+  // The browser releases the lock when the document is destroyed; no stale lease.
+  if(!navigator.locks || typeof navigator.locks.request !== "function"){
+    blockedStartup("Браузер не поддерживает защиту локальных данных. Откройте сканер по HTTPS в актуальном Safari или Chrome.");
+    return;
+  }
+  navigator.locks.request("cs.state.writer.v1", { mode:"exclusive", ifAvailable:true }, lock => {
+    if(!lock){
+      blockedStartup("Сканер уже открыт в другой вкладке или окне. Закройте другой экземпляр и нажмите «Повторить». Данные не изменены.");
+      return;
+    }
+    ownsStorage = true;
+    for(const [el, disabled] of controls) el.disabled = disabled;
+    startApp();
+    return new Promise(() => {}); // Hold ownership for the whole document lifetime.
+  }).then(() => { ownsStorage = false; onLockLost(); }, () => {
+    ownsStorage = false;
+    if(onLockLost()) return;
+    blockedStartup("Не удалось получить защиту локальных данных. Данные не изменены. Закройте другие окна сканера и повторите запуск по HTTPS.");
+  });
+
+  function startApp(){
+  let loadError = null, rawState = null;
+  const isObject = v => v !== null && typeof v === "object" && !Array.isArray(v);
+  const safeId = id => typeof id === "string" && !!id && !["__proto__", "constructor", "prototype"].includes(id);
+  function validRecord(kind, o){
+    if(!isObject(o) || typeof o.id !== "string" || (o.updatedAt !== undefined && !Number.isFinite(o.updatedAt))) return false;
+    return kind === "items" ? typeof o.code === "string" && typeof o.time === "string" :
+      kind === "batches" ? typeof o.name === "string" : typeof o.pattern === "string" && typeof o.device === "string";
+  }
+
+  // ---------- local state: everything stays on this phone until the user deletes a list ----------
+  // Lists (batches), codes (items) and device rules, keyed by id. States saved by v16 and earlier also
+  // carry sync fields (epoch, _dirty, deleted tombstones): load() drops those and keeps every live record.
+  function load(){
+    let s = null;
+    try{
+      rawState = localStorage.getItem(KEY);
+      if(rawState !== null){
+        s = JSON.parse(rawState);
+        if(!isObject(s) || KINDS.some(k => s[k] !== undefined && (!isObject(s[k]) || Object.values(s[k]).some(o => !validRecord(k, o)))))
+          throw new Error("Invalid local state");
+      }
+    }catch(e){ loadError = e; return null; }
+    s = s || {};
+    const next = { prefixLen: s.prefixLen || 6, batchId: s.batchId, batches: {}, items: {}, rules: {} };
+    if(s.legacyRecovery) next.legacyRecovery = s.legacyRecovery;
+    if(typeof s.lastBackupAt === "string") next.lastBackupAt = s.lastBackupAt;
+    for(const k of KINDS) for(const o of Object.values(s[k] || {})) if(!o.deleted) next[k][o.id] = clean(o);
+    for(const it of Object.values(next.items)) ensureList(next, it);
+    if(!next.batchId || !next.batches[next.batchId]) newList(next);
+    return next;
+  }
+  function clean(o){ const c = Object.assign({}, o); delete c._dirty; delete c.deleted; delete c.deviceId; return c; }
+  // a code whose list is missing gets a placeholder list instead of disappearing
+  function ensureList(s, it){
+    if(!safeId(it.batchId)) it.batchId = "restored";
+    if(!s.batches[it.batchId]) s.batches[it.batchId] = { id: it.batchId, name: "Восстановленный список", startedAt: it.time, updatedAt: 0 };
+  }
+  function newList(s){
+    const now = new Date();
+    const b = { id: CS.uid(), name: "Список " + now.toLocaleString("ru-RU", { day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit" }),
+      startedAt: now.toISOString(), updatedAt: Date.now() };
+    s.batches[b.id] = b; s.batchId = b.id;
+  }
+  let S = load();
+  if(loadError){
+    // Keep the original key untouched. No scanning or edits can replace it.
+    for(const [el] of controls) el.disabled = true;
+    $("manualForm").onsubmit = $("ruleForm").onsubmit = e => e.preventDefault();
+    if(rawState === null) notice("Хранилище телефона недоступно. Приложение остановлено, чтобы не заменить сохранённые списки пустыми.");
+    else notice("Локальные данные повреждены. Исходное содержимое сохранено без изменений. Скачайте его для восстановления.", "Скачать исходные данные", async () => {
+      try{ await CS.saveBlob("kaylers-scanner-damaged_" + CS.stamp() + ".json", new Blob([rawState], { type:"application/json" })); }
+      catch(e){ $("noticeText").textContent = "Экспорт не удался. Исходные данные остаются в хранилище телефона."; }
+    });
+    return;
+  }
+  let lastStateRaw = rawState, saveFailed = false;
+  function blockInstance(text){
+    instanceBlocked = text;
+    stopCam().catch(() => {});
+    for(const el of document.querySelectorAll("button, input")) if(el.id !== "noticeBtn") el.disabled = true;
+    renderNotice();
+  }
+  function canWriteState(){
+    if(instanceBlocked) return false;
+    let text = "Право записи этого окна потеряно.";
+    try{
+      if(ownsStorage && localStorage.getItem(KEY) === lastStateRaw) return true;
+      if(ownsStorage) text = "Локальные данные изменены другим окном или старой версией приложения.";
+    }catch(e){ text = "Не удалось проверить локальное хранилище."; }
+    blockInstance(text);
+    return false;
+  }
+  function persist(){
+    if(!canWriteState()) return false;
+    try{
+      const raw = JSON.stringify(S); localStorage.setItem(KEY, raw); lastStateRaw = raw;
+      if(saveFailed){ saveFailed = false; renderNotice(); }
+      return true;
+    }catch(e){ saveFailed = true; renderNotice(); return false; }
+  }
+  function renderNotice(){
+    const stop = saveFailed || !!instanceBlocked;
+    $("camBtn").disabled = $("manualInput").disabled = stop;
+    if(stop) $("backupConfirm").disabled = true;
+    if(instanceBlocked) notice(instanceBlocked + " Изменения этого окна остаются только в памяти: скачайте резервную копию, затем закройте окно и откройте сканер заново.", "Скачать резервную копию", exportBackup);
+    else if(saveFailed) notice("Телефон не даёт сохранить данные: память заполнена или недоступна. Новые сканы остановлены. Последние изменения есть только в памяти: скачайте резервную копию до закрытия приложения.", "Скачать резервную копию", exportBackup);
+    else notice("");
+  }
+
+  const rulesArr = () => Object.values(S.rules);
+  const batchItems = (bid = S.batchId) => Object.values(S.items).filter(i => i.batchId === bid)
+    .sort((a, b) => a.time.localeCompare(b.time));
+  const touch = o => { o.updatedAt = Math.max(Date.now(), (o.updatedAt || 0) + 1); };
+
+  // ---------- UI helpers ----------
+  function say(text, kind){ const m = $("msg"); m.textContent = text; m.className = "msg" + (kind ? " " + kind : ""); }
+  let audio;
+  function beep(buzz = true){
+    try{
+      audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+      const o = audio.createOscillator(), g = audio.createGain();
+      o.frequency.value = 1400; g.gain.value = .08; o.connect(g); g.connect(audio.destination);
+      o.start(); o.stop(audio.currentTime + .08);
+    }catch(e){}
+    if(buzz) try{ navigator.vibrate && navigator.vibrate(60); }catch(e){}
+  }
+  const fmtName = f => (f || "").replace(/_/g, " ").replace("QR CODE", "QR");
+  function btn(text, cls, onclick){
+    const b = document.createElement("button"); b.type = "button"; b.textContent = text;
+    if(cls) b.className = cls; b.onclick = onclick; return b;
+  }
+
+  let freshId = null, editing = null, editN = 6, editMode = "prefix";
+
+  function addCode(code, format, buzzed){
+    if(!canWriteState()) return false;
+    if(saveFailed && !persist()){ renderNotice(); return false; }
+    code = String(code).trim();
+    if(!code) return;
+    if(batchItems().some(i => i.code === code)){ say("Уже в этом списке: " + code, "warn"); return; }
+    const it = { id: CS.uid(), batchId: S.batchId, code, format: fmtName(format) || "Вручную", time: new Date().toISOString() };
+    touch(it); S.items[it.id] = it; freshId = it.id;
+    const saved = persist();
+    if(saved){ beep(!buzzed); say("Добавлено: " + code, "ok"); }
+    else stopCam().catch(() => {});
+    render();
+    return saved;
+  }
+
+  function render(){
+    const items = batchItems();
+    const b = S.batches[S.batchId];
+    $("count").firstChild.nodeValue = items.length;
+    $("scanCount").textContent = items.length;
+    $("endBtn").disabled = items.length === 0;
+    $("batchTitle").textContent = b.name;
+    $("sessionStart").textContent = items.length ? CS.period(items) : "";
+    const draft = $("nameInput") ? $("nameInput").value : null;
+    const list = $("list"); list.textContent = "";
+    renderLists(); renderNotice();
+    if(!items.length){
+      const li = document.createElement("li"); li.className = "empty";
+      li.textContent = "Список пустой. Нажмите «Сканировать» и наведите телефон на QR-код или штрихкод: коды появляются здесь сразу. Камера остаётся открытой для следующих кодов, закройте её кнопкой «Закрыть».";
+      list.appendChild(li); return;
+    }
+    const rules = rulesArr();
+    items.slice().reverse().forEach((it, ri) => {
+      const idx = items.length - ri;
+      const li = document.createElement("li");
+      if(it.id === freshId) li.className = "fresh";
+      const n = document.createElement("span"); n.className = "n"; n.textContent = idx;
+      const body = document.createElement("div"); body.style.minWidth = "0";
+      const c = document.createElement("div"); c.className = "code";
+      const rule = CS.matchRule(rules, it.code);
+      const hl = editing === it.id && editMode === "prefix" ? Math.min(editN, it.code.length) : rule && rule.type === "prefix" ? rule.pattern.length : 0;
+      if(hl){ const p = document.createElement("span"); p.className = "pfx"; p.textContent = it.code.slice(0, hl); c.append(p, it.code.slice(hl)); }
+      else c.textContent = it.code;
+      const meta = document.createElement("div"); meta.className = "meta";
+      const dev = rule ? rule.device : "";
+      const d = document.createElement("button"); d.type = "button";
+      d.className = dev ? "chip dev" : "chip add"; d.textContent = dev || "+ название";
+      d.setAttribute("aria-label", dev ? "Изменить название для " + it.code : "Указать устройство для " + it.code);
+      d.onclick = () => {
+        const o = $("nameInput"); if(o) o.remove();
+        editing = it.id;
+        editMode = rule && rule.type === "exact" ? "exact" : "prefix";
+        editN = rule && rule.type === "prefix" ? rule.pattern.length : S.prefixLen;
+        render();
+      };
+      meta.appendChild(d);
+      const f = document.createElement("span"); f.className = "chip"; f.textContent = it.format; meta.appendChild(f);
+      const t = document.createElement("span"); t.className = "chip"; t.textContent = new Date(it.time).toLocaleTimeString("ru-RU"); meta.appendChild(t);
+      body.append(c, meta);
+      if(editing === it.id) body.appendChild(namer(it, rule, dev, draft));
+      const del = document.createElement("button"); del.className = "del"; del.type = "button"; del.setAttribute("aria-label", "Удалить " + it.code); del.textContent = "×";
+      del.onclick = () => { if(!canWriteState()) return; delete S.items[it.id]; persist(); render(); };
+      li.append(n, body, del); list.appendChild(li);
+    });
+    freshId = null;
+  }
+
+  function namer(it, rule, dev, draft){
+    const form = document.createElement("form"); form.className = "namer";
+    const inp = document.createElement("input"); inp.id = "nameInput"; inp.value = draft !== null ? draft : dev;
+    inp.placeholder = "Название устройства"; inp.setAttribute("aria-label", "Название устройства");
+    const scope = document.createElement("div"); scope.className = "scope";
+    const mk = (val, text) => { const b = document.createElement("button"); b.type = "button"; b.textContent = text;
+      b.className = "seg" + (editMode === val ? " on" : ""); b.setAttribute("aria-pressed", editMode === val);
+      b.onclick = () => { editMode = val; render(); }; return b; };
+    scope.append(mk("prefix", "По началу кода"), mk("exact", "Только этот"));
+    const tune = document.createElement("div"); tune.className = "tune";
+    const n = Math.min(editN, it.code.length);
+    if(editMode === "prefix"){
+      const minus = document.createElement("button"); minus.type = "button"; minus.textContent = "−"; minus.setAttribute("aria-label", "Меньше символов");
+      const plus = document.createElement("button"); plus.type = "button"; plus.textContent = "+"; plus.setAttribute("aria-label", "Больше символов");
+      minus.disabled = n <= 1; plus.disabled = n >= it.code.length;
+      minus.onclick = () => { editN = Math.max(1, n - 1); render(); };
+      plus.onclick = () => { editN = Math.min(it.code.length, n + 1); render(); };
+      const lab = document.createElement("span"); lab.className = "hint";
+      lab.append("Первые ", Object.assign(document.createElement("b"), { textContent: n }), " симв.: название получат все коды, начинающиеся с ");
+      lab.appendChild(Object.assign(document.createElement("code"), { textContent: it.code.slice(0, n) }));
+      tune.append(minus, plus, lab);
+    } else {
+      const lab = document.createElement("span"); lab.className = "hint"; lab.textContent = "Название получит только код " + it.code + ".";
+      tune.appendChild(lab);
+    }
+    const actions = document.createElement("div"); actions.className = "pair";
+    const ok = document.createElement("button"); ok.type = "submit"; ok.className = "primary"; ok.textContent = "Сохранить";
+    const no = document.createElement("button"); no.type = "button"; no.className = "ghost"; no.textContent = "Отмена";
+    no.onclick = () => { editing = null; inp.remove(); render(); };
+    actions.append(ok, no);
+    form.onsubmit = e => {
+      e.preventDefault();
+      if(!canWriteState()) return;
+      const name = inp.value.trim();
+      const C = it.code.toUpperCase();
+      // remove the rule this code uses now (and its own exact rule), then add the new one
+      for(const r of rulesArr())
+        if(r === rule || (r.type === "exact" && r.pattern.toUpperCase() === C)) delete S.rules[r.id];
+      if(name){
+        if(editMode === "prefix"){ upsertRule({ type:"prefix", pattern: it.code.slice(0, n), device: name }); S.prefixLen = n; }
+        else upsertRule({ type:"exact", pattern: it.code, device: name });
+      }
+      editing = null; inp.remove(); persist(); renderRules(); render();
+      say(name ? (editMode === "prefix" ? `«${name}» для всех кодов на ${it.code.slice(0, n)}…` : "Название сохранено: " + name) : "Название убрано.", "ok");
+    };
+    form.append(inp, scope, tune, actions);
+    setTimeout(() => inp.focus(), 0);
+    return form;
+  }
+
+  // ---------- rules (device base) ----------
+  // same type and pattern (any case) is one rule: a new device name replaces the old one
+  function upsertRule(r){
+    const same = rulesArr().find(x => x.type === r.type && x.pattern.toUpperCase() === r.pattern.toUpperCase());
+    if(same){
+      if(same.device === r.device) return "same";
+      same.device = r.device; touch(same); return "updated";
+    }
+    r = { id: CS.uid(), type: r.type, pattern: r.pattern, device: r.device }; touch(r); S.rules[r.id] = r;
+    return "added";
+  }
+  function renderRules(){
+    const box = $("rules"); box.textContent = "";
+    const live = rulesArr().sort((a, b) => a.device.localeCompare(b.device, "ru"));
+    $("rulesExportBtn").disabled = !live.length;
+    const head = document.createElement("p"); head.className = "hint"; head.textContent = live.length ? "Правил: " + live.length : "Правил пока нет."; box.appendChild(head);
+    live.forEach(r => {
+      const row = document.createElement("div"); row.className = "rule";
+      const t = document.createElement("div");
+      t.append(Object.assign(document.createElement("code"), { textContent: CS.showPattern(r) }), " → " + r.device);
+      const del = document.createElement("button"); del.className = "del"; del.type = "button"; del.textContent = "×"; del.setAttribute("aria-label", "Удалить правило");
+      del.onclick = () => { if(!canWriteState()) return; delete S.rules[r.id]; persist(); renderRules(); render(); };
+      row.append(t, del); box.appendChild(row);
+    });
+  }
+  $("ruleForm").onsubmit = e => {
+    e.preventDefault();
+    if(!canWriteState()) return;
+    const r = CS.parsePattern($("rulePattern").value); r.device = $("ruleDevice").value.trim();
+    if(!r.pattern || !r.device){ say("Проверьте шаблон и название.", "warn"); return; }
+    if(r.type === "regex"){ try{ new RegExp(r.pattern); }catch(_){ say("Регулярное выражение с ошибкой.", "warn"); return; } }
+    upsertRule(r); persist();
+    $("rulePattern").value = ""; $("ruleDevice").value = "";
+    renderRules(); render();
+  };
+  // the device base as an Excel file: to edit on a PC or to load on another phone
+  $("rulesExportBtn").onclick = async () => {
+    if(typeof XLSX === "undefined"){ say("Модуль Excel не загрузился. Обновите страницу.", "warn"); return; }
+    try{
+      const r = await CS.saveBlob("spravochnik_ustroystv_" + CS.stamp() + ".xlsx", CS.rulesBlob(rulesArr()));
+      say(r === "declined" ? "Сохранение отменено." : "Справочник сохранён в файл.", r === "declined" ? "warn" : "ok");
+    }catch(e){ say("Не удалось сохранить справочник.", "warn"); }
+  };
+  $("rulesImportBtn").onclick = () => $("rulesFile").click();
+  $("rulesFile").onchange = async () => {
+    const file = $("rulesFile").files && $("rulesFile").files[0]; $("rulesFile").value = "";
+    if(!file) return;
+    try{
+      if(typeof XLSX === "undefined") throw new Error("модуль Excel не загрузился, обновите страницу");
+      const { rules, skipped } = CS.readRules(await file.arrayBuffer());
+      if(!rules.length) throw new Error("в файле нет строк «код или шаблон — название»");
+      if(!canWriteState()) return;
+      const n = { added: 0, updated: 0, same: 0 };
+      for(const r of rules) n[upsertRule(r)]++;
+      const saved = persist(); renderRules(); render();
+      say(saved ? `Справочник загружен: новых правил ${n.added}, изменено ${n.updated}, без изменений ${n.same}` + (skipped ? `, пропущено строк ${skipped}` : "") + "." :
+        "Справочник загружен, но телефон не смог его сохранить.", saved ? "ok" : "warn");
+    }catch(e){ say("Не получилось загрузить справочник: " + (e.message || e), "warn"); }
+  };
+
+  // ---------- my lists: every list stays on the phone until it is deleted here ----------
+  let deleting = null;
+  const listsByDate = () => Object.values(S.batches).sort((a, b) => String(b.startedAt).localeCompare(String(a.startedAt)));
+  function renderLists(){
+    const box = $("lists"); box.textContent = "";
+    const all = listsByDate();
+    $("allExcelBtn").disabled = !all.some(b => batchItems(b.id).length);
+    for(const b of all){
+      const items = batchItems(b.id), current = b.id === S.batchId;
+      const row = document.createElement("div"); row.className = "listrow" + (current ? " on" : "");
+      const name = document.createElement("div"); name.className = "lname"; name.textContent = b.name;
+      const when = document.createElement("div"); when.className = "hint";
+      when.textContent = items.length + " кодов · " + (items.length ? CS.period(items) : "пустой") + (current ? " · открыт" : "");
+      const acts = document.createElement("div"); acts.className = "pair";
+      if(deleting === b.id){
+        const q = document.createElement("div");
+        q.textContent = `Удалить «${b.name}» и ${items.length} кодов с телефона? Вернуть их можно будет только из резервной копии.`;
+        acts.append(btn("Удалить", "danger", () => deleteList(b.id)), btn("Отмена", "ghost", () => { deleting = null; renderLists(); }));
+        row.append(name, when, q, acts);
+      } else {
+        if(!current) acts.appendChild(btn("Открыть", "", () => openList(b.id)));
+        const x = btn("Excel", "", () => exportLists([b], CS.fileName(b.name))); x.disabled = !items.length;
+        acts.append(x, btn("Удалить", "ghost danger", () => { deleting = b.id; renderLists(); }));
+        row.append(name, when, acts);
+      }
+      box.appendChild(row);
+    }
+  }
+  function openList(id){
+    if(!S.batches[id] || !canWriteState()) return;
+    // an empty list holds no codes; leaving it would only clutter the menu
+    if(S.batchId !== id && !batchItems().length) delete S.batches[S.batchId];
+    S.batchId = id; editing = null; $("batchForm").hidden = true; $("afterExport").hidden = true;
+    persist(); render();
+    say("Открыт список «" + S.batches[id].name + "». Новые коды попадут в него.", "ok");
+    try{ window.scrollTo(0, 0); }catch(e){}
+  }
+  function deleteList(id){
+    deleting = null;
+    const b = S.batches[id];
+    if(!b || !canWriteState()) return;
+    for(const [iid, it] of Object.entries(S.items)) if(it.batchId === id) delete S.items[iid];
+    delete S.batches[id];
+    if(S.batchId === id){ newList(S); editing = null; $("batchForm").hidden = true; $("afterExport").hidden = true; }
+    persist(); render();
+    say("Список «" + b.name + "» удалён с телефона.", "ok");
+  }
+  async function exportLists(lists, name){
+    if(typeof XLSX === "undefined"){ say("Модуль Excel не загрузился. Обновите страницу.", "warn"); return; }
+    lists = lists.filter(b => batchItems(b.id).length);
+    if(!lists.length) return;
+    try{
+      const r = await CS.saveBlob(name, CS.workbookBlob(lists.map(b => [b.name, CS.batchSheet(b, batchItems(b.id), rulesArr())])));
+      say(r === "declined" ? "Сохранение отменено." : "Excel готов: " + name, r === "declined" ? "warn" : "ok");
+    }catch(e){ say("Не удалось сохранить Excel.", "warn"); }
+  }
+  $("allExcelBtn").onclick = () => exportLists(listsByDate().reverse(), "scan_all_" + CS.stamp() + ".xlsx");
+
+  // ---------- backup: one JSON file with every list, code and rule ----------
+  async function exportBackup(){
+    const raw = JSON.stringify({ app: "kaylers-scanner", kind: "backup", version: 1, createdAt: new Date().toISOString(),
+      batches: Object.values(S.batches), items: Object.values(S.items), rules: Object.values(S.rules) });
+    try{
+      const r = await CS.saveBlob("kaylers-scanner-backup_" + CS.stamp() + ".json", new Blob([raw], { type:"application/json" }));
+      if(r === "saved" && !saveFailed && !instanceBlocked && canWriteState()){ S.lastBackupAt = new Date().toISOString(); persist(); $("afterBackup").hidden = true; storageInfo(); }
+      say(r === "declined" ? "Сохранение копии отменено. Данные остаются на телефоне." : "Резервная копия готова. Данные остаются на телефоне.", r === "declined" ? "warn" : "ok");
+    }catch(e){ say("Не удалось сохранить резервную копию. Данные остаются на телефоне.", "warn"); }
+  }
+  $("backupBtn").onclick = exportBackup;
+  $("afterBackup").onclick = exportBackup;
+  // codes scanned after the last backup file: only these would be lost with the phone's storage
+  const unbacked = () => Object.values(S.items).filter(i => !S.lastBackupAt || i.time > S.lastBackupAt).length;
+
+  // Reads a backup file, or a recovery JSON saved by v13–v16 (same arrays plus batchContext).
+  function readBackup(text){
+    if(text.length > 10 * 1024 * 1024) throw new Error("Файл больше 10 МБ.");
+    let copy;
+    try{ copy = JSON.parse(text); }catch(e){ throw new Error("Файл не является корректным JSON."); }
+    if(!isObject(copy) || !KINDS.every(k => Array.isArray(copy[k])))
+      throw new Error("Это не резервная копия сканера. Ничего не добавлено.");
+    const valid = (kind, o) => validRecord(kind, o) && safeId(o.id) &&
+      (kind !== "items" || safeId(o.batchId) && !!o.code && Number.isFinite(Date.parse(o.time))) &&
+      (kind !== "rules" || ["exact", "prefix", "contains", "regex"].includes(o.type));
+    const lists = Array.isArray(copy.batchContext) ? copy.batchContext.concat(copy.batches) : copy.batches;
+    for(const [kind, rows] of [["batches", lists], ["items", copy.items], ["rules", copy.rules]])
+      if(!rows.every(o => valid(kind, o)) || kind !== "batches" && new Set(rows.map(o => o.id)).size !== rows.length)
+        throw new Error("В файле некорректные или повторяющиеся записи. Ничего не добавлено.");
+    const live = rows => rows.filter(o => !o.deleted).map(clean);
+    return { createdAt: typeof copy.createdAt === "string" ? copy.createdAt : "",
+      batches: live(lists), items: live(copy.items), rules: live(copy.rules) };
+  }
+  // Adds only what the phone lacks: unknown codes (not already in the same list), their lists, and rules
+  // for patterns the phone has no rule for. Existing records are never changed.
+  function importPlan(copy){
+    const add = { batches: [], items: [], rules: [] }, have = new Set(Object.values(S.items).map(i => i.batchId + "\n" + i.code));
+    let skipped = 0;
+    for(const it of copy.items){
+      const key = it.batchId + "\n" + it.code;
+      if(S.items[it.id] || have.has(key)){ skipped++; continue; }
+      have.add(key); add.items.push(it);
+    }
+    const lists = new Map(copy.batches.map(b => [b.id, b]));
+    for(const it of add.items) if(!S.batches[it.batchId] && !add.batches.some(b => b.id === it.batchId))
+      add.batches.push(lists.get(it.batchId) || { id: it.batchId, name: "Восстановленный список", startedAt: it.time, updatedAt: 0 });
+    const patterns = new Set(rulesArr().map(r => r.type + "\n" + r.pattern.toUpperCase()));
+    for(const r of copy.rules){
+      const key = r.type + "\n" + r.pattern.toUpperCase();
+      if(S.rules[r.id] || patterns.has(key)) continue;
+      patterns.add(key); add.rules.push(r);
+    }
+    return { add, skipped, count: add.items.length + add.batches.length + add.rules.length };
+  }
+  function applyImport(plan){ for(const k of KINDS) for(const o of plan.add[k]) S[k][o.id] = Object.assign({}, o); }
+
+  let backupPreview = null, backupRead = 0;
+  function previewBackup(text){
+    backupPreview = null; $("backupPreview").hidden = true;
+    try{
+      const copy = readBackup(text), plan = importPlan(copy);
+      const names = new Map(copy.batches.map(b => [b.id, b.name])), ids = [...new Set(copy.items.map(i => i.batchId))];
+      $("backupPreviewText").textContent = (copy.createdAt ? "Копия от " + new Date(copy.createdAt).toLocaleString("ru-RU") + "\n" : "") +
+        `В файле: кодов ${copy.items.length}, списков ${ids.length}, правил ${copy.rules.length}.\n` +
+        ids.map(id => "• " + (names.get(id) || "Восстановленный список") + ": " + copy.items.filter(i => i.batchId === id).length).join("\n");
+      $("backupStatus").textContent = !plan.count ? "Всё из этого файла уже есть на телефоне." :
+        `Добавится: кодов ${plan.add.items.length}, списков ${plan.add.batches.length}, правил ${plan.add.rules.length}.` +
+        (plan.skipped ? ` Уже есть на телефоне: ${plan.skipped} кодов, они не изменятся.` : "");
+      $("backupConfirm").disabled = !plan.count || saveFailed || !!instanceBlocked;
+      $("backupPreview").hidden = false;
+      backupPreview = copy;
+      return true;
+    }catch(e){ $("backupStatus").textContent = e.message; return false; }
+  }
+  $("backupFile").onchange = async () => {
+    const read = ++backupRead, file = $("backupFile").files[0];
+    backupPreview = null; $("backupPreview").hidden = true;
+    if(!file) return;
+    try{
+      if(file.size > 10 * 1024 * 1024) throw new Error("Файл больше 10 МБ.");
+      const text = await file.text(); if(read === backupRead) previewBackup(text);
+    }catch(e){ if(read === backupRead) $("backupStatus").textContent = "Не удалось прочитать файл: " + e.message; }
+  };
+  function confirmBackup(){
+    if(!backupPreview || saveFailed || !canWriteState()) return false;
+    const plan = importPlan(backupPreview); // recomputed: scans made since the preview are respected
+    backupPreview = null; $("backupPreview").hidden = true; $("backupFile").value = "";
+    if(!plan.count){ $("backupStatus").textContent = "Всё из этого файла уже есть на телефоне."; return true; }
+    applyImport(plan);
+    const saved = persist(); renderRules(); render();
+    $("backupStatus").textContent = saved ? `Добавлено: кодов ${plan.add.items.length}, списков ${plan.add.batches.length}, правил ${plan.add.rules.length}. Списки открываются в «Мои списки».` :
+      "Не удалось сохранить на телефоне. Данные остаются в памяти: скачайте резервную копию до закрытия приложения.";
+    return saved;
+  }
+  $("backupConfirm").onclick = confirmBackup;
+  $("backupCancel").onclick = () => { ++backupRead; backupPreview = null; $("backupPreview").hidden = true; $("backupFile").value = ""; $("backupStatus").textContent = "Просмотр закрыт, ничего не добавлено."; };
+
+  // iOS keeps a Home Screen app's storage apart from Safari tabs, and Safari may erase a tab's site data after 7 days without a visit.
+  async function storageInfo(){
+    const standalone = navigator.standalone === true || !!(window.matchMedia && window.matchMedia("(display-mode: standalone)").matches);
+    let persisted = false;
+    try{ if(navigator.storage && navigator.storage.persist) persisted = await navigator.storage.persisted() || await navigator.storage.persist(); }catch(e){}
+    $("storageText").textContent = (standalone ?
+      "Списки хранятся только в этом приложении на этом телефоне. Удаляются они только здесь, кнопкой «Удалить»." :
+      "Сканер открыт во вкладке браузера. На iPhone запускайте его со значка на экране «Домой»: у вкладки Safari и значка разные хранилища, а данные вкладки Safari может стереть, если сайт не открывали 7 дней.") +
+      (persisted ? "" : " При нехватке памяти система может очистить данные.") +
+      " Удаление значка или очистка данных Safari стирает списки, поэтому время от времени скачивайте резервную копию." +
+      (S.lastBackupAt ? " Последняя копия: " + new Date(S.lastBackupAt).toLocaleString("ru-RU", { day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit" }) + ", новых кодов после неё: " + unbacked() + "." :
+        " Резервной копии ещё не было.");
+  }
+
+  // ---------- scanner: full screen, scans code after code until "Закрыть" ----------
+  let cam = null, running = false, done = false, busy = false;
+  let torchOn = false, focusTimer = null, zoomVal = null;
+  const CAM_KEY = "cs.cam";
+  // the camera track; unsupported constraints must never break scanning, so every call is guarded
+  const camTrack = () => { const v = document.querySelector("#reader video"); return v && v.srcObject ? v.srcObject.getVideoTracks()[0] : null; };
+  const caps = t => { try{ return (t && t.getCapabilities && t.getCapabilities()) || {}; }catch(e){ return {}; } };
+  const settings = t => { try{ return (t && t.getSettings && t.getSettings()) || {}; }catch(e){ return {}; } };
+  async function tryConstraints(t, c){ try{ await t.applyConstraints({ advanced:[c] }); return true; }catch(e){ return false; } }
+  const store = (k, v) => { try{ v ? localStorage.setItem(k, v) : localStorage.removeItem(k); }catch(e){} };
+  const stored = k => { try{ return localStorage.getItem(k); }catch(e){ return null; } };
+
+  // iPhone: the plain "Back Camera" is the main lens, which cannot focus closer than ~15-20 cm.
+  // The virtual multi-lens cameras switch to the macro (ultra-wide) lens by themselves, like Apple's Code Scanner.
+  const MULTI = /triple|dual wide|тройн|двойн.*широк/i;
+  function cameraScore(label){
+    if(/front|передн|face/i.test(label)) return 0;
+    if(MULTI.test(label)) return 4;
+    if(/dual|двойн/i.test(label)) return 2;
+    if(/tele|ultra|сверх/i.test(label)) return 0;
+    return /back|rear|задн|environment/i.test(label) ? 1 : 0;
+  }
+  async function bestCamera(){
+    try{
+      const list = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === "videoinput" && d.label);
+      let best = null, top = 1;
+      for(const d of list){ const s = cameraScore(d.label); if(s > top){ best = d; top = s; } }
+      return best;
+    }catch(e){ return null; }
+  }
+
+  // Continuous scanning: the camera stays open. A code is saved the moment it is read (addCode stores it on the phone),
+  // then the animation plays; "done" blocks new detections while it runs. The same code still in frame is ignored
+  // until it has been out of sight for REPEAT_MS; a code already in the list only gets a grey "Уже в списке" pill.
+  const REPEAT_MS = 2500;
+  let lastCode = null, lastSeen = 0;
+  function onCode(text, res, box){
+    text = String(text).trim();
+    const now = Date.now();
+    if(text === lastCode && now - lastSeen < REPEAT_MS){ lastSeen = now; return; }
+    if(done || busy || !text) return;
+    done = true; lastCode = text; lastSeen = now;
+    const known = batchItems().some(i => i.code === text);
+    if(known) haptic(20);
+    else{
+      haptic(50);
+      addCode(text, res && res.result && res.result.format && res.result.format.formatName, true);
+      bumpCount();
+    }
+    playFx(box, known ? "Уже в списке" : text, known).finally(() => { done = false; });
+  }
+  // Android: vibrate. iPhone Safari has no vibrate; on iOS 18+ toggling a switch checkbox gives a tick, may be ignored elsewhere
+  function haptic(ms){
+    try{ if(navigator.vibrate){ navigator.vibrate(ms); return; } }catch(e){}
+    try{ $("hapticLabel").click(); }catch(e){}
+  }
+  function bumpCount(){
+    const c = $("scanCount");
+    if(c.animate) c.animate([{ transform: "translateX(-50%) scale(1)" }, { transform: "translateX(-50%) scale(1.25)" }, { transform: "translateX(-50%) scale(1)" }], { duration: 260, easing: "ease-out" });
+  }
+  // html5-qrcode does not say where the code is: zxing-wasm and the native BarcodeDetector do; otherwise the brackets go to the centre
+  async function codeBox(){
+    const v = document.querySelector("#reader video");
+    if(!v || !v.videoWidth || !("BarcodeDetector" in window)) return null;
+    try{
+      const found = await Promise.race([new BarcodeDetector().detect(v), new Promise(r => setTimeout(() => r([]), 150))]);
+      const bb = found && found.length ? found.map(f => f.boundingBox).sort((a, b) => b.width * b.height - a.width * a.height)[0] : null;
+      if(!bb || !bb.width) return null;
+      const vr = v.getBoundingClientRect(), view = $("scanView").getBoundingClientRect(), k = vr.width / v.videoWidth;
+      return { x: vr.left - view.left + bb.x * k, y: vr.top - view.top + bb.y * k, w: bb.width * k, h: bb.height * k };
+    }catch(e){ return null; }
+  }
+  // ---------- scan-success animation, like the iPhone Code Scanner ----------
+  // Yellow corner brackets fly from the aiming frame onto the code (its real position when known, else the centre),
+  // a pill with the text appears, then everything fades out softly. Only transform/opacity are animated.
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+  const fxEl = (cls, css) => { const d = document.createElement("div"); d.className = cls; if(css) Object.assign(d.style, css); $("fx").appendChild(d); return d; };
+  const run = (node, frames, opts) => node.animate(frames, Object.assign({ fill:"forwards" }, opts)).finished.catch(() => {});
+  async function playFx(box, text, grey){
+    const fx = $("fx");
+    if(!fx.animate){ await wait(900); return; }
+    box = box || await codeBox();
+    try{
+      const view = $("scanView").getBoundingClientRect(), fr = document.querySelector("#scanView .frame").getBoundingClientRect();
+      const side = Math.min(view.width, view.height) * .45, s = 30;
+      const f = { x: fr.left - view.left, y: fr.top - view.top, w: fr.width, h: fr.height };
+      const t = box ? { x: box.x - 10, y: box.y - 10, w: box.w + 20, h: box.h + 20 } : { x: (view.width - side) / 2, y: (view.height - side) / 2, w: side, h: side };
+      const at = (q, cx, cy) => `translate(${q.x + cx * (q.w - s)}px, ${q.y + cy * (q.h - s)}px)`;
+      await Promise.all([["tl", 0, 0], ["tr", 1, 0], ["bl", 0, 1], ["br", 1, 1]].map(([c, cx, cy]) =>
+        run(fxEl("fx-corner " + c), [{ transform: at(f, cx, cy), opacity: .6 }, { transform: at(t, cx, cy), opacity: 1 }], { duration: 380, easing: "cubic-bezier(.34,1.56,.64,1)" })));
+      const p = fxEl(grey ? "fx-pill grey" : "fx-pill"); p.textContent = text;
+      run(p, [{ opacity: 0, transform: "translate(-50%, 12px)" }, { opacity: 1, transform: "translate(-50%, 0)" }], { duration: 200, easing: "ease-out" });
+      await wait(600);
+      const out = fx.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 200, easing: "ease-out", fill: "forwards" });
+      await out.finished;
+      fx.textContent = ""; out.cancel();
+    }catch(e){ fx.textContent = ""; }
+  }
+
+  // zxing-cpp (WebAssembly, vendor/zxing-reader.js) reads Data Matrix, Aztec and PDF417 tilted and in perspective,
+  // which ZXing-js inside html5-qrcode only reads held straight. It runs on frames where html5-qrcode found nothing.
+  const WASM_OPTS = { tryHarder:true, tryRotate:true, tryInvert:true, tryDownscale:true, maxNumberOfSymbols:1,
+    formats:["DataMatrix", "Aztec", "QRCode", "MicroQRCode", "PDF417", "AllLinear"] };
+  let wasmReady = null, wasmBusy = false, lastWasm = 0, wasmCanvas = null;
+  function prepareWasm(){
+    if(wasmReady || typeof ZXingWASM === "undefined") return;
+    const wasmUrl = new URL("vendor/zxing_reader.wasm", location.href).href;
+    wasmReady = ZXingWASM.prepareZXingModule({ overrides:{ locateFile:(p, prefix) => p.endsWith(".wasm") ? wasmUrl : prefix + p }, fireImmediately:true })
+      .then(() => true, () => false);
+  }
+  async function wasmScan(v){
+    wasmBusy = true;
+    try{
+      if(!await wasmReady) return;
+      const k = Math.min(1, 960 / Math.max(v.videoWidth, v.videoHeight)), w = Math.round(v.videoWidth * k), h = Math.round(v.videoHeight * k);
+      const c = wasmCanvas = wasmCanvas || document.createElement("canvas");
+      c.width = w; c.height = h;
+      const g = c.getContext("2d", { willReadFrequently:true });
+      g.drawImage(v, 0, 0, w, h);
+      const r = (await ZXingWASM.readBarcodes(g.getImageData(0, 0, w, h), WASM_OPTS)).find(x => x.isValid && x.text);
+      if(!r || done || busy || !running) return;
+      const p = r.position, xs = [p.topLeft.x, p.topRight.x, p.bottomLeft.x, p.bottomRight.x], ys = [p.topLeft.y, p.topRight.y, p.bottomLeft.y, p.bottomRight.y];
+      const vr = v.getBoundingClientRect(), view = $("scanView").getBoundingClientRect(), s = vr.width / w;
+      const x0 = Math.min(...xs), y0 = Math.min(...ys);
+      const box = { x: vr.left - view.left + x0 * s, y: vr.top - view.top + y0 * s, w: (Math.max(...xs) - x0) * s, h: (Math.max(...ys) - y0) * s };
+      onCode(r.text, { result:{ format:{ formatName: r.format } } }, box);
+    }catch(e){}finally{ wasmBusy = false; }
+  }
+
+  // ZXing reads 1D barcodes only when they are near horizontal. On frames where nothing was found,
+  // also try one rotated copy of the frame (90°, 45°, −45° in turn). The native BarcodeDetector reads any angle itself.
+  const TURNS = [90, 45, -45];
+  let turn = 0, lastTurn = 0, turnCanvas = null;
+  function onMiss(){
+    if(done || busy || !running || !cam) return;
+    const v = document.querySelector("#reader video");
+    if(!v || !v.videoWidth) return;
+    const now = Date.now();
+    if(wasmReady && !wasmBusy && now - lastWasm >= 250){ lastWasm = now; wasmScan(v); return; }
+    if(!cam.qrcode || "BarcodeDetector" in window || now - lastTurn < 120) return;
+    lastTurn = now;
+    try{
+      const a = TURNS[turn++ % TURNS.length] * Math.PI / 180;
+      const k = Math.min(1, 720 / Math.max(v.videoWidth, v.videoHeight)), w = v.videoWidth * k, h = v.videoHeight * k;
+      const cos = Math.abs(Math.cos(a)), sin = Math.abs(Math.sin(a));
+      const c = turnCanvas = turnCanvas || document.createElement("canvas");
+      c.width = Math.round(w * cos + h * sin); c.height = Math.round(w * sin + h * cos);
+      const g = c.getContext("2d", { willReadFrequently:true });
+      g.fillStyle = "#fff"; g.fillRect(0, 0, c.width, c.height);
+      g.translate(c.width / 2, c.height / 2); g.rotate(a); g.drawImage(v, -w / 2, -h / 2, w, h);
+      cam.qrcode.decodeAsync(c).then(r => { if(running && r && r.text) onCode(r.text, { result:r }); }, () => {});
+    }catch(e){}
+  }
+
+  async function openStream(id){
+    const vc = { width:{ ideal:1920 }, height:{ ideal:1080 }, advanced:[{ focusMode:"continuous" }] };
+    if(id) vc.deviceId = { exact:id }; else vc.facingMode = "environment";
+    cam = cam || new Html5Qrcode("reader", { verbose:false, experimentalFeatures:{ useBarCodeDetectorIfSupported:true } });
+    // no qrbox: the whole frame is scanned; no mirrored second pass, the back camera never needs it
+    await cam.start(id ? { deviceId:{ exact:id } } : { facingMode:"environment" }, { fps:15, disableFlip:true, videoConstraints:vc }, onCode, onMiss);
+    running = true;
+  }
+  async function closeStream(){
+    // ask the library, not our flag: a start that failed half-way can leave it scanning (states 2 scanning, 3 paused)
+    let st = 0; try{ st = cam ? cam.getState() : 0; }catch(e){}
+    if(running || st >= 2){
+      try{ await cam.stop(); }
+      catch(e){
+        // the library got stuck: release the camera by hand and start over with a fresh instance next time
+        const v = document.querySelector("#reader video");
+        try{ v && v.srcObject && v.srcObject.getTracks().forEach(t => t.stop()); }catch(_){}
+        $("reader").textContent = ""; cam = null;
+      }
+    }
+    running = false;
+  }
+
+  // ---------- controls: torch, tap to focus ----------
+  function setTorchUi(on){ torchOn = on; $("torchBtn").setAttribute("aria-pressed", on); }
+  async function setupControls(){
+    const t = camTrack(), c = caps(t);
+    $("torchBtn").hidden = !c.torch;
+    const modes = c.focusMode || [];
+    if(modes.includes("continuous")) await tryConstraints(t, { focusMode:"continuous" });
+    if(c.zoom){
+      // on the multi-lens cameras zoom 1 is the ultra-wide lens; 2 matches the normal 1x view
+      const want = zoomVal != null ? zoomVal : (MULTI.test(t.label) ? 2 : null);
+      if(want != null && await tryConstraints(t, { zoom: Math.min(c.zoom.max, Math.max(c.zoom.min, want)) })) zoomVal = want;
+    }
+  }
+  // never stops or reopens the stream (that flashes the preview black); without focus controls it does nothing
+  async function refocus(pt){
+    const t = camTrack(); if(!t || busy) return;
+    const c = caps(t), modes = c.focusMode || [];
+    clearTimeout(focusTimer);
+    if(modes.includes("single-shot")){
+      await tryConstraints(t, { focusMode:"single-shot", pointsOfInterest:[pt] });
+      if(modes.includes("continuous")) focusTimer = setTimeout(() => { const t2 = camTrack(); if(t2) tryConstraints(t2, { focusMode:"continuous" }); }, 2500);
+    } else if(modes.includes("continuous")){
+      // switching away and back forces a new autofocus pass
+      await tryConstraints(t, modes.includes("manual") ? { focusMode:"manual" } : { pointsOfInterest:[pt] });
+      focusTimer = setTimeout(() => { const t2 = camTrack(); if(t2) tryConstraints(t2, { focusMode:"continuous", pointsOfInterest:[pt] }); }, 100);
+    } else if(c.pointsOfInterest) await tryConstraints(t, { pointsOfInterest:[pt] });
+  }
+  function showRing(x, y){
+    const ring = $("focusRing");
+    ring.style.left = x + "px"; ring.style.top = y + "px";
+    ring.hidden = false; ring.classList.remove("go"); void ring.offsetWidth; ring.classList.add("go");
+  }
+  $("scanView").addEventListener("click", e => {
+    if(!running || e.target.id === "scanCount") return;
+    const view = $("scanView").getBoundingClientRect();
+    showRing(e.clientX - view.left, e.clientY - view.top);
+    let v = document.querySelector("#reader video").getBoundingClientRect();
+    if(!v.width || !v.height) v = view;
+    const norm = n => Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : .5;
+    refocus({ x: norm((e.clientX - v.left) / v.width), y: norm((e.clientY - v.top) / v.height) });
+  });
+
+  $("torchBtn").onclick = async () => {
+    const t = camTrack(); if(!t || busy) return;
+    if(!await tryConstraints(t, { torch: !torchOn })) return;
+    setTorchUi(!torchOn);
+    // the light changes the scene, so focus again
+    setTimeout(() => {
+      if(!running) return;
+      const view = $("scanView").getBoundingClientRect();
+      showRing(view.width / 2, view.height / 2);
+      refocus({ x:.5, y:.5 });
+    }, 300);
+  };
+
+  // what this phone's camera allows, to send to the developer as a screenshot
+  $("infoBtn").onclick = async () => {
+    const p = $("infoPanel");
+    if(!p.hidden){ p.hidden = true; return; }
+    const t = camTrack();
+    let cams = [];
+    try{ cams = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === "videoinput").map(d => d.label); }catch(e){}
+    const txt = JSON.stringify({ camera: t && t.label, cameras: cams, capabilities: caps(t), settings: settings(t) }, null, 1);
+    $("infoText").textContent = txt;
+    p.hidden = false;
+    try{ await navigator.clipboard.writeText(txt); $("infoCopied").hidden = false; }catch(e){ $("infoCopied").hidden = true; }
+  };
+  $("infoPanel").onclick = () => { $("infoPanel").hidden = true; };
+
+  async function startCam(){
+    if(typeof Html5Qrcode === "undefined"){ say("Модуль распознавания не загрузился. Обновите страницу.", "warn"); return; }
+    $("scanner").hidden = false; done = false; busy = true; lastCode = null;
+    prepareWasm();
+    $("torchBtn").hidden = true; $("infoPanel").hidden = true;
+    setTorchUi(false);
+    try{
+      let id = stored(CAM_KEY);
+      if(!id){
+        // camera names are only visible after permission: open the camera briefly, pick the multi-lens one, remember it
+        try{ (await navigator.mediaDevices.getUserMedia({ video:{ facingMode:"environment" } })).getTracks().forEach(t => t.stop()); }catch(e){}
+        const best = await bestCamera();
+        if(best){ id = best.deviceId; store(CAM_KEY, id); }
+      }
+      try{ await openStream(id); }
+      catch(e){
+        if(!id) throw e;
+        store(CAM_KEY, null); await closeStream(); await openStream(null);
+      }
+      await setupControls();
+    }catch(e){
+      await closeStream();
+      $("scanner").hidden = true;
+      say(location.protocol === "https:" ? "Камера не включилась. Разрешите доступ к камере: Настройки → Safari → Камера."
+        : "Камера работает только по адресу https. Откройте сканер по адресу https или введите код вручную.", "warn");
+    }finally{ busy = false; }
+  }
+  async function stopCam(){
+    clearTimeout(focusTimer);
+    if(torchOn){ const t = camTrack(); if(t) await tryConstraints(t, { torch:false }); setTorchUi(false); }
+    await closeStream();
+    $("scanner").hidden = true; $("focusRing").hidden = true; $("infoPanel").hidden = true; $("fx").textContent = "";
+  }
+  $("scanClose").onclick = () => stopCam();
+  $("camBtn").onclick = () => startCam();
+
+  $("manualForm").onsubmit = e => { e.preventDefault(); addCode($("manualInput").value, ""); $("manualInput").value = ""; };
+
+  // ---------- Excel + lists ----------
+  $("endBtn").onclick = async () => {
+    if(typeof XLSX === "undefined"){ say("Модуль Excel не загрузился. Обновите страницу.", "warn"); return; }
+    await stopCam();
+    const b = S.batches[S.batchId], items = batchItems();
+    const blob = CS.workbookBlob([[b.name, CS.batchSheet(b, items, rulesArr())]]);
+    const name = CS.fileName(b.name);
+    const r = await CS.saveBlob(name, blob);
+    if(r === "declined"){ say("Сохранение отменено. Список на месте.", "warn"); return; }
+    const n = unbacked();
+    $("afterText").textContent = `Файл ${name} готов (${items.length} кодов). Начать новый список? Этот останется в «Мои списки».` +
+      (n ? ` Кодов без резервной копии: ${n}, сохраните её в «Файлы».` : "");
+    $("afterBackup").hidden = !n;
+    $("afterExport").hidden = false;
+  };
+  // the finished list stays on the phone, in "Мои списки"
+  function startNewList(){
+    $("afterExport").hidden = true; $("batchForm").hidden = true;
+    if(batchItems().length === 0){ say("Этот список ещё пустой, сканируйте в него."); return; }
+    if(!canWriteState()) return;
+    const b = S.batches[S.batchId];
+    b.closedAt = new Date().toISOString(); touch(b);
+    newList(S); persist();
+    say("Новый список. Предыдущий сохранён в «Мои списки».", "ok"); render();
+  }
+  $("newBtn").onclick = startNewList;
+  $("afterNew").onclick = startNewList;
+  $("afterKeep").onclick = () => { $("afterExport").hidden = true; };
+
+  // ---------- list name: tap the list title to rename the current list ----------
+  $("nameBtn").onclick = () => {
+    const inp = $("batchInput");
+    inp.value = S.batches[S.batchId].name || "";
+    $("batchForm").hidden = false; inp.focus(); inp.select();
+  };
+  $("batchCancel").onclick = () => { $("batchForm").hidden = true; };
+  $("batchForm").onsubmit = e => {
+    e.preventDefault();
+    const b = S.batches[S.batchId], name = $("batchInput").value.replace(/\s+/g, " ").trim();
+    $("batchForm").hidden = true;
+    if(!name || name === b.name || !canWriteState()) return;
+    b.name = name; touch(b); persist(); render();
+    say("Название списка: " + name, "ok");
+  };
+
+  if("serviceWorker" in navigator && window.isSecureContext) navigator.serviceWorker.register("sw.js").catch(() => {});
+
+  onLockLost = () => { blockInstance("Право записи этого окна потеряно."); return true; };
+  window.addEventListener("pageshow", e => { if(e.persisted) blockInstance("Окно восстановлено из истории браузера. Нужно заново проверить право записи."); });
+
+  // v13–v16 kept unsent scans in a separate recovery copy: add the records this state lacks, once
+  try{
+    const raw = localStorage.getItem(LEGACY_RECOVERY);
+    if(raw){
+      const copy = readBackup(raw), mark = copy.createdAt || "unknown";
+      if(S.legacyRecovery !== mark){ applyImport(importPlan(copy)); S.legacyRecovery = mark; }
+    }
+  }catch(e){}
+  // writes the migrated state once; a failure shows the "save failed" notice
+  if(JSON.stringify(S) !== lastStateRaw) persist();
+  render(); renderRules(); storageInfo();
+  }
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,20 @@
+// Keeps the app usable with no connection to the PC: app files come from the cache,
+// refreshed in the background whenever the PC is reachable. The app sends nothing to the PC.
+// keep in step with the version shown in the header of index.html
+const CACHE = "cs-app-v19";
+const FILES = ["index.html", "common.js", "vendor/html5-qrcode.min.js", "vendor/xlsx.full.min.js",
+  "vendor/zxing-reader.js", "vendor/zxing_reader.wasm",
+  "manifest.webmanifest", "icon-180.png", "icon-512.png"];
+self.addEventListener("install", e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)).then(() => self.skipWaiting())); });
+self.addEventListener("activate", e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim())); });
+self.addEventListener("fetch", e => {
+  const url = new URL(e.request.url);
+  if(e.request.method !== "GET" || url.origin !== location.origin) return;
+  if(e.request.mode === "navigate" && !["/", "/index.html"].includes(url.pathname)) return;
+  e.respondWith(caches.open(CACHE).then(async c => {
+    const key = e.request.mode === "navigate" ? "index.html" : e.request;
+    const hit = await c.match(key, { ignoreSearch: true });
+    const fresh = fetch(e.request.mode === "navigate" ? "index.html" : e.request).then(r => { if(r.ok && !r.redirected) c.put(key, r.clone()); return r; }).catch(() => null);
+    return hit || (await fresh) || new Response("Нет связи с ПК", { status: 503 });
+  }));
+});
