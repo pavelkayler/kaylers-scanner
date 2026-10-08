@@ -66,8 +66,15 @@ button:disabled{opacity:.45;cursor:default}
 .fx-corner.br{border-bottom-width:4px;border-right-width:4px;border-bottom-right-radius:10px}
 .fx-pill{left:50%;bottom:72px;max-width:85%;padding:8px 14px;border-radius:999px;background:#FFD60A;color:#16212B;font:600 .95rem/1.2 var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transform:translateX(-50%);opacity:0}
 .fx-pill.grey{background:#8E8E93;color:#fff;font-family:var(--body)}
-/* codes in the current list, read from the saved list; sits under the pill */
-.scan-count{position:absolute;left:50%;bottom:16px;z-index:3;transform:translateX(-50%);min-width:44px;padding:6px 14px;border-radius:999px;background:rgba(0,0,0,.6);color:#fff;font:600 1.1rem/1.2 var(--mono);text-align:center;font-variant-numeric:tabular-nums}
+/* scan confirmed: the screen edge glows green (orange for a code already in the list) and a big tick pops up on the code */
+.fx-glow{inset:0;border:8px solid #34C759;box-shadow:inset 0 0 70px rgba(52,199,89,.75);background:rgba(52,199,89,.16);opacity:0}
+.fx-glow.dup{border-color:#FF9F0A;box-shadow:inset 0 0 70px rgba(255,159,10,.7);background:rgba(255,159,10,.12)}
+.fx-tick{left:0;top:0;width:96px;height:96px;border-radius:50%;background:#34C759;color:#fff;display:grid;place-items:center;box-shadow:0 6px 24px rgba(0,0,0,.35);opacity:0}
+.fx-tick svg{width:56px;height:56px}
+/* codes in the current list, read from the saved list; sits under the pill and turns green with a pop on each new code */
+.scan-count{position:absolute;left:50%;bottom:16px;z-index:3;transform:translateX(-50%);display:flex;align-items:baseline;gap:8px;padding:8px 18px;border-radius:999px;background:rgba(0,0,0,.65);color:#fff;font:600 1.6rem/1.1 var(--mono);text-align:center;font-variant-numeric:tabular-nums;white-space:nowrap;transition:background-color .35s ease-out}
+.scan-count small{font:500 .8rem/1 var(--body);opacity:.85}
+.scan-count.hit{background:#34C759;transition:none}
 #reader{width:100%}
 #reader video{width:100%!important;display:block}
 .scanner-top{position:absolute;top:0;left:0;right:0;padding:calc(env(safe-area-inset-top,0px) + 14px) 16px 14px;color:#fff;text-align:center;font-weight:600;background:linear-gradient(rgba(0,0,0,.6),transparent);z-index:2}
@@ -139,7 +146,7 @@ button.wide{width:100%;margin-top:10px}
 <header>
   <div>
     <div class="label" id="batchLabel">Список</div>
-    <h1>Kayler's Scanner <span class="ver">v19</span></h1>
+    <h1>Kayler's Scanner <span class="ver">v20</span></h1>
   </div>
   <div class="count" id="count" aria-live="polite">0<small>кодов</small></div>
 </header>
@@ -221,7 +228,7 @@ button.wide{width:100%;margin-top:10px}
     <pre id="infoText"></pre>
     <div>Сделайте скриншот и отправьте. Нажмите, чтобы закрыть.</div>
   </div>
-  <div class="scanner-view" id="scanView"><div id="reader"></div><div class="frame" aria-hidden="true"></div><div class="fx" id="fx"></div><div class="scan-count" id="scanCount" role="status" aria-label="Кодов в списке">0</div><div class="focus-ring" id="focusRing" hidden></div></div>
+  <div class="scanner-view" id="scanView"><div id="reader"></div><div class="frame" aria-hidden="true"></div><div class="fx" id="fx"></div><div class="scan-count" id="scanCount" role="status" aria-label="Кодов в списке"><span id="scanNum">0</span><small>в списке</small></div><div class="focus-ring" id="focusRing" hidden></div></div>
   <div class="scanner-bar"><button type="button" id="scanClose">Закрыть</button></div>
   <label id="hapticLabel" aria-hidden="true" style="position:absolute;width:1px;height:1px;overflow:hidden;opacity:0;pointer-events:none"><input type="checkbox" switch tabindex="-1"></label>
 </div>
@@ -405,7 +412,7 @@ button.wide{width:100%;margin-top:10px}
     const items = batchItems();
     const b = S.batches[S.batchId];
     $("count").firstChild.nodeValue = items.length;
-    $("scanCount").textContent = items.length;
+    $("scanNum").textContent = items.length;
     $("endBtn").disabled = items.length === 0;
     $("batchTitle").textContent = b.name;
     $("sessionStart").textContent = items.length ? CS.period(items) : "";
@@ -792,9 +799,12 @@ button.wide{width:100%;margin-top:10px}
     try{ if(navigator.vibrate){ navigator.vibrate(ms); return; } }catch(e){}
     try{ $("hapticLabel").click(); }catch(e){}
   }
+  let hitTimer = 0;
   function bumpCount(){
     const c = $("scanCount");
-    if(c.animate) c.animate([{ transform: "translateX(-50%) scale(1)" }, { transform: "translateX(-50%) scale(1.25)" }, { transform: "translateX(-50%) scale(1)" }], { duration: 260, easing: "ease-out" });
+    c.classList.add("hit"); clearTimeout(hitTimer);
+    hitTimer = setTimeout(() => c.classList.remove("hit"), 900);
+    if(c.animate) c.animate([{ transform: "translateX(-50%) scale(1)" }, { transform: "translateX(-50%) scale(1.6)", offset: .35 }, { transform: "translateX(-50%) scale(1)" }], { duration: 520, easing: "ease-out" });
   }
   // html5-qrcode does not say where the code is: zxing-wasm and the native BarcodeDetector do; otherwise the brackets go to the centre
   async function codeBox(){
@@ -817,6 +827,7 @@ button.wide{width:100%;margin-top:10px}
   async function playFx(box, text, grey){
     const fx = $("fx");
     if(!fx.animate){ await wait(900); return; }
+    run(fxEl(grey ? "fx-glow dup" : "fx-glow"), [{ opacity: 0 }, { opacity: 1, offset: .15 }, { opacity: 1, offset: .5 }, { opacity: 0 }], { duration: 1100, easing: "ease-out" });
     box = box || await codeBox();
     try{
       const view = $("scanView").getBoundingClientRect(), fr = document.querySelector("#scanView .frame").getBoundingClientRect();
@@ -826,6 +837,12 @@ button.wide{width:100%;margin-top:10px}
       const at = (q, cx, cy) => `translate(${q.x + cx * (q.w - s)}px, ${q.y + cy * (q.h - s)}px)`;
       await Promise.all([["tl", 0, 0], ["tr", 1, 0], ["bl", 0, 1], ["br", 1, 1]].map(([c, cx, cy]) =>
         run(fxEl("fx-corner " + c), [{ transform: at(f, cx, cy), opacity: .6 }, { transform: at(t, cx, cy), opacity: 1 }], { duration: 380, easing: "cubic-bezier(.34,1.56,.64,1)" })));
+      if(!grey){
+        const k = fxEl("fx-tick"), cx = t.x + t.w / 2 - 48, cy = t.y + t.h / 2 - 48;
+        k.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+        run(k, [{ opacity: 0, transform: `translate(${cx}px, ${cy}px) scale(.3)` }, { opacity: 1, transform: `translate(${cx}px, ${cy}px) scale(1.15)`, offset: .6 },
+          { opacity: 1, transform: `translate(${cx}px, ${cy}px) scale(1)` }], { duration: 260, easing: "ease-out" });
+      }
       const p = fxEl(grey ? "fx-pill grey" : "fx-pill"); p.textContent = text;
       run(p, [{ opacity: 0, transform: "translate(-50%, 12px)" }, { opacity: 1, transform: "translate(-50%, 0)" }], { duration: 200, easing: "ease-out" });
       await wait(600);
@@ -946,7 +963,7 @@ button.wide{width:100%;margin-top:10px}
     ring.hidden = false; ring.classList.remove("go"); void ring.offsetWidth; ring.classList.add("go");
   }
   $("scanView").addEventListener("click", e => {
-    if(!running || e.target.id === "scanCount") return;
+    if(!running || e.target.closest("#scanCount")) return;
     const view = $("scanView").getBoundingClientRect();
     showRing(e.clientX - view.left, e.clientY - view.top);
     let v = document.querySelector("#reader video").getBoundingClientRect();

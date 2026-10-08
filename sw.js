@@ -1,7 +1,7 @@
 // Keeps the app usable with no connection to the PC: app files come from the cache,
 // refreshed in the background whenever the PC is reachable. The app sends nothing to the PC.
 // keep in step with the version shown in the header of index.html
-const CACHE = "cs-app-v19";
+const CACHE = "cs-app-v20";
 const FILES = ["index.html", "common.js", "vendor/html5-qrcode.min.js", "vendor/xlsx.full.min.js",
   "vendor/zxing-reader.js", "vendor/zxing_reader.wasm",
   "manifest.webmanifest", "icon-180.png", "icon-512.png"];
