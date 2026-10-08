@@ -147,7 +147,7 @@ button.wide{width:100%;margin-top:10px}
 <header>
   <div>
     <div class="label" id="batchLabel">Список</div>
-    <h1>Kayler's Scanner <span class="ver">v21</span></h1>
+    <h1>Kayler's Scanner <span class="ver">v22</span></h1>
   </div>
   <div class="count" id="count" aria-live="polite">0<small>кодов</small></div>
 </header>
@@ -795,8 +795,8 @@ button.wide{width:100%;margin-top:10px}
     }
     playFx(box, known ? "Уже в списке" : text, known).finally(pauseAfterScan);
   }
-  // Two seconds from a scan to the next read: the animation plays, then the frame stays dashed for the rest of it.
-  const PAUSE_MS = 2000, HINT = $("scanHint").textContent;
+  // Three seconds from a scan to the next read: the animation plays, then the frame stays dashed for the rest of it.
+  const PAUSE_MS = 3000, HINT = $("scanHint").textContent;
   let pauseTimer = 0, scannedAt = 0;
   function pauseAfterScan(){
     clearTimeout(pauseTimer);
