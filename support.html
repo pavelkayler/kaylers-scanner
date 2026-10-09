@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<script src="portrait.js"></script>
+<title>Kayler's Scanner: Support</title>
+<style>
+:root{--bg:#F3F5F4;--surface:#fff;--ink:#16212B;--muted:#5E6B74;--line:#D9DFDD;--accent:#C2410C;color-scheme:light}
+@media (prefers-color-scheme: dark){:root{--bg:#0F161C;--surface:#18222B;--ink:#E8EEF0;--muted:#95A3AC;--line:#2A3742;--accent:#FF7A33;color-scheme:dark}}
+/* text size: 17px is the iOS default body size; -apple-system-body makes it follow Settings → Display & Text Size (Dynamic Type) */
+html{font-size:17px;-webkit-text-size-adjust:100%;text-size-adjust:100%}
+@supports (font: -apple-system-body){html{font:-apple-system-body}}
+body{background:var(--bg);color:var(--ink);font:.94rem/1.55 -apple-system,"Segoe UI",Roboto,sans-serif;max-width:640px;margin:0 auto;padding:calc(var(--safe-top,env(safe-area-inset-top,0px)) + 16px) 16px calc(var(--safe-bottom,env(safe-area-inset-bottom,0px)) + 40px)}
+h1{font-size:1.4rem;margin:12px 0 4px} h2{font-size:1.05rem;margin:24px 0 6px}
+p,li{margin:0 0 8px} .muted{color:var(--muted);font-size:.9rem}
+/* standalone links (not links inside running text): 44 pt tap area */
+.links a,li>a{display:inline-block;padding-block:11px;overflow-wrap:anywhere}
+a[href^="mailto:"]{display:inline-block;padding-block:11px;overflow-wrap:anywhere}
+a{color:var(--accent)} .back{display:inline-flex;align-items:center;min-height:44px;font-weight:600;text-decoration:none}
+</style>
+</head>
+<body>
+<a class="back" href="./">← Back to the app</a>
+<h1>Support</h1>
+<p class="muted">Kayler's Scanner: scan QR codes and barcodes into lists and export them to Excel.</p>
+
+<h2>Getting started</h2>
+<ol>
+  <li>Tap <b>Scan</b> and point the camera at a QR code or barcode. Each new code is saved at once; the camera stays open for the next one.</li>
+  <li>After each scan the scanner waits a moment before reading the next code (3 seconds by default; change it in <b>Settings</b>).</li>
+  <li>Tap <b>Export to Excel</b> to share the list as an .xlsx file, or <b>Copy codes</b> to paste them as plain text.</li>
+  <li><b>New list</b> starts another list; earlier lists stay in <b>My lists</b>.</li>
+</ol>
+
+<h2>Device names</h2>
+<p>In <b>Device catalog</b>, a rule gives codes a device name: <code>INV-LT*</code> means "starts with INV-LT", <code>*LT*</code> "contains LT", and a code without an asterisk must match exactly. You can also tap "+ name" next to a scanned code. The catalog can be exported to Excel and imported on another phone.</p>
+
+<h2>Backups and moving to another phone</h2>
+<p>Your lists are stored only on your phone. Use <b>My lists → Save backup</b> from time to time and keep the file in Files. To restore, use <b>Restore from a backup</b>: you see a preview first, and only lists and codes the phone does not have yet are added.</p>
+<p>Moving from the web version to the iOS app (or between phones) works the same way: save a backup in one, restore it in the other. Their storage is separate.</p>
+
+<h2>Common questions</h2>
+<p><b>The camera does not start.</b> Allow camera access: Settings → Apps → Kayler's Scanner → Camera (web version: Settings → Apps → Safari → Camera). You can always type a code by hand.</p>
+<p><b>A code is not added.</b> A code that is already in the open list shows "Already in list" and is not added twice. The same code held in front of the camera is read once.</p>
+<p><b>I deleted a code by mistake.</b> Tap <b>Undo</b> within 10 seconds.</p>
+<p><b>The app says it could not save data.</b> The phone's storage may be full. Save a backup right away, free some space, then continue.</p>
+<p><b>Which version do I have?</b> It is shown in About (at the bottom of the main screen).</p>
+
+<h2>Contact</h2>
+<p>Email <a href="mailto:pavelkayler@icloud.com">pavelkayler@icloud.com</a>. Please include the app version and, for camera problems, the text from About → Diagnostics.</p>
+<p class="links"><a href="privacy.html">Privacy Policy</a> · <a href="licenses.html">Open-source licenses</a></p>
+</body>
+</html>
